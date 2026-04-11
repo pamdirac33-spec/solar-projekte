@@ -587,7 +587,7 @@ with col_right:
 
         fig_con = go.Figure()
 
-        # Paletas por año (mismo estilo que producción)
+        # Paletas por año (coherentes con Producción)
         años_unicos = sorted(dfc["Año"].unique())
         colores_consumed = ["#A6ACAF", "#909497", "#7B7D7D", "#626567"]
         colores_pvused   = ["#F9E79F", "#F7DC6F", "#F4D03F", "#F1C40F"]
@@ -602,7 +602,8 @@ with col_right:
                 y=df_a["Consumed"],
                 name=f"Consumed {año}",
                 marker_color=colores_consumed[idx % len(colores_consumed)],
-                offsetgroup=f"{año}_cons"
+                offsetgroup=f"{año}_cons",     # ← independiente
+                legendgroup=f"{año}_cons"
             )
 
             # PV USED (apilado)
@@ -611,7 +612,8 @@ with col_right:
                 y=df_a["PV Used"],
                 name=f"PV Used {año}",
                 marker_color=colores_pvused[idx % len(colores_pvused)],
-                offsetgroup=f"{año}_stack"
+                offsetgroup=f"{año}_stack",    # ← grupo apilado
+                legendgroup=f"{año}_stack"
             )
 
             # FROM NETZ (apilado)
@@ -620,10 +622,11 @@ with col_right:
                 y=df_a["From Netz"],
                 name=f"From Netz {año}",
                 marker_color=colores_fromnetz[idx % len(colores_fromnetz)],
-                offsetgroup=f"{año}_stack"
+                offsetgroup=f"{año}_stack",    # ← mismo grupo apilado
+                legendgroup=f"{año}_stack"
             )
 
-            # Línea discontinua por año (mismo color que Consumed)
+            # Línea discontinua por año
             fig_con.add_scatter(
                 x=df_a["Mes"],
                 y=df_a["Consumed"],
@@ -647,7 +650,6 @@ with col_right:
         )
 
         st.plotly_chart(fig_con, use_container_width=True)
-
     # ---------------------------------------------------------
     # VISTA ANUAL AGREGADA
     # ---------------------------------------------------------
