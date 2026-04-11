@@ -517,7 +517,8 @@ with col_right:
                 y=df_a["Produced"],
                 name=f"Produced {año}",
                 marker_color=colores_produced[idx % len(colores_produced)],
-                offsetgroup=f"{año}_prod"
+                offsetgroup=f"{año}_prod",     # ← independiente
+                legendgroup=f"{año}_prod"
             )
 
             # PV USED (apilado)
@@ -526,7 +527,8 @@ with col_right:
                 y=df_a["PV Used"],
                 name=f"PV Used {año}",
                 marker_color=colores_pvused[idx % len(colores_pvused)],
-                offsetgroup=f"{año}_stack"
+                offsetgroup=f"{año}_stack",    # ← mismo grupo apilado
+                legendgroup=f"{año}_stack"
             )
 
             # TO NETZ (apilado)
@@ -535,10 +537,11 @@ with col_right:
                 y=df_a["To Netz"],
                 name=f"To Netz {año}",
                 marker_color=colores_tonetz[idx % len(colores_tonetz)],
-                offsetgroup=f"{año}_stack"
+                offsetgroup=f"{año}_stack",    # ← mismo grupo apilado
+                legendgroup=f"{año}_stack"
             )
 
-            # Línea discontinua por año (mismo color que Produced pero más oscuro)
+            # Línea discontinua por año
             fig_prod.add_scatter(
                 x=df_a["Mes"],
                 y=df_a["Produced"],
