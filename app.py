@@ -112,7 +112,7 @@ def pills_selector(label, items, default_selected=None, key_prefix="pills"):
 
     # Detectar si todo está seleccionado
     all_selected = len(selected) == len(items)
-    label_btn = "Deseleccionar todo" if all_selected else "Seleccionar todo"
+    label_btn = "Deselect All" if all_selected else "Select All"
 
     # BOTÓN SELECT/DESELECT ALL
     if st.button(label_btn, key=f"{key_prefix}_toggle"):
@@ -295,7 +295,7 @@ with col_right:
     # 3) 📊 DISTRIBUCIÓN MENSUAL (Producción / Consumo)
     # =========================================================
     with tab3:
-        st.subheader("🔆 Producción mensual — desglose PV Used / To Netz")
+        st.subheader("🔆 Producción Mensual — PV Used / To Netz")
 
         df_prod = df_kpi[df_kpi["Tipo"].isin(["Produced", "PV Used", "To Netz"])]
         df_prod_m = df_prod.groupby(["Año", "Mes", "Tipo"])["Valor"].sum().reset_index()
@@ -308,57 +308,76 @@ with col_right:
         ).reset_index()
 
         dfp["Mes"] = pd.Categorical(dfp["Mes"], categories=orden_meses, ordered=True)
-        dfp = dfp.sort_values(["Año", "Mes"])
+        dfp = dfp.sort_values(["Mes", "Año"])
 
         fig_prod = go.Figure()
 
-        fig_prod.add_bar(
-            x=dfp["Mes"],
-            y=dfp["Produced"],
-            name="Produced",
-            marker_color="#F7DC6F",
-            offsetgroup=0
-        )
+        # Paletas por año
+        años_unicos = sorted(dfp["Año"].unique())
+        colores_produced = ["#F9E79F", "#F7DC6F", "#F4D03F", "#F1C40F"]
+        colores_pvused   = ["#D5D8DC", "#A6ACAF", "#7F8C8D", "#566573"]
+        colores_tonetz   = ["#85C1E9", "#5DADE2", "#3498DB", "#2E86C1"]
 
-        fig_prod.add_bar(
-            x=dfp["Mes"],
-            y=dfp["PV Used"],
-            name="PV Used",
-            marker_color="#A6ACAF",
-            offsetgroup=1
-        )
+        for idx, año in enumerate(años_unicos):
+            df_a = dfp[dfp["Año"] == año]
 
-        fig_prod.add_bar(
-            x=dfp["Mes"],
-            y=dfp["To Netz"],
-            name="To Netz",
-            marker_color="#2980B9",
-            offsetgroup=1
-        )
+            # PRODUCED (independiente)
+            fig_prod.add_bar(
+                x=df_a["Mes"],
+                y=df_a["Produced"],
+                name=f"Produced {año}",
+                marker_color=colores_produced[idx % len(colores_produced)],
+                offsetgroup=f"{año}_prod"
+            )
 
-        fig_prod.add_scatter(
-            x=dfp["Mes"],
-            y=dfp["Produced"],
-            mode="lines",
-            showlegend=False,
-            line=dict(color="#2980B9", width=1, dash="dash")
-        )
+            # PV USED (apilado)
+            fig_prod.add_bar(
+                x=df_a["Mes"],
+                y=df_a["PV Used"],
+                name=f"PV Used {año}",
+                marker_color=colores_pvused[idx % len(colores_pvused)],
+                offsetgroup=f"{año}_stack"
+            )
+
+            # TO NETZ (apilado)
+            fig_prod.add_bar(
+                x=df_a["Mes"],
+                y=df_a["To Netz"],
+                name=f"To Netz {año}",
+                marker_color=colores_tonetz[idx % len(colores_tonetz)],
+                offsetgroup=f"{año}_stack"
+            )
+
+            # Línea discontinua por año (mismo color que Produced pero más oscuro)
+            fig_prod.add_scatter(
+                x=df_a["Mes"],
+                y=df_a["Produced"],
+                mode="lines",
+                name=f"Trend {año}",
+                line=dict(
+                    color=colores_produced[idx % len(colores_produced)],
+                    width=1.5,
+                    dash="dash"
+                ),
+                showlegend=False
+            )
 
         fig_prod.update_layout(
             barmode="relative",
             plot_bgcolor="#f4f4f4",
             paper_bgcolor="#f4f4f4",
             font_color="#222",
-            height=500,
-            title="Producción mensual — Total vs PV Used / To Netz"
+            height=550,
+            title="Producción mensual — comparación multiaño"
         )
 
         st.plotly_chart(fig_prod, use_container_width=True)
 
+
         # ---------------------------------------------------------
-        # CONSUMO
+        # NUEVA GRÁFICA MENSUAL — CONSUMO (CORREGIDA)
         # ---------------------------------------------------------
-        st.subheader("⚡ Consumo mensual — desglose PV Used / From Netz")
+        st.subheader("⚡ Consumo Mensual — PV Used / From Netz")
 
         df_con = df_kpi[df_kpi["Tipo"].isin(["Consumed", "PV Used", "From Netz"])]
         df_con_m = df_con.groupby(["Año", "Mes", "Tipo"])["Valor"].sum().reset_index()
@@ -371,53 +390,71 @@ with col_right:
         ).reset_index()
 
         dfc["Mes"] = pd.Categorical(dfc["Mes"], categories=orden_meses, ordered=True)
-        dfc = dfc.sort_values(["Año", "Mes"])
+        dfc = dfc.sort_values(["Mes", "Año"])
 
         fig_con = go.Figure()
 
-        fig_con.add_bar(
-            x=dfc["Mes"],
-            y=dfc["Consumed"],
-            name="Consumed",
-            marker_color="#A6ACAF",
-            offsetgroup=0
-        )
+        # Paletas por año (mismo estilo que producción)
+        años_unicos = sorted(dfc["Año"].unique())
+        colores_consumed = ["#A6ACAF", "#909497", "#7B7D7D", "#626567"]
+        colores_pvused   = ["#F9E79F", "#F7DC6F", "#F4D03F", "#F1C40F"]
+        colores_fromnetz = ["#85C1E9", "#5DADE2", "#3498DB", "#2E86C1"]
 
-        fig_con.add_bar(
-            x=dfc["Mes"],
-            y=dfc["PV Used"],
-            name="PV Used",
-            marker_color="#F7DC6F",
-            offsetgroup=1
-        )
+        for idx, año in enumerate(años_unicos):
+            df_a = dfc[dfc["Año"] == año]
 
-        fig_con.add_bar(
-            x=dfc["Mes"],
-            y=dfc["From Netz"],
-            name="From Netz",
-            marker_color="#2980B9",
-            offsetgroup=1
-        )
+            # CONSUMED (independiente)
+            fig_con.add_bar(
+                x=df_a["Mes"],
+                y=df_a["Consumed"],
+                name=f"Consumed {año}",
+                marker_color=colores_consumed[idx % len(colores_consumed)],
+                offsetgroup=f"{año}_cons"
+            )
 
-        fig_con.add_scatter(
-            x=dfc["Mes"],
-            y=dfc["Consumed"],
-            mode="lines",
-            showlegend=False,
-            line=dict(color="#2980B9", width=1, dash="dash")
-        )
+            # PV USED (apilado)
+            fig_con.add_bar(
+                x=df_a["Mes"],
+                y=df_a["PV Used"],
+                name=f"PV Used {año}",
+                marker_color=colores_pvused[idx % len(colores_pvused)],
+                offsetgroup=f"{año}_stack"
+            )
+
+            # FROM NETZ (apilado)
+            fig_con.add_bar(
+                x=df_a["Mes"],
+                y=df_a["From Netz"],
+                name=f"From Netz {año}",
+                marker_color=colores_fromnetz[idx % len(colores_fromnetz)],
+                offsetgroup=f"{año}_stack"
+            )
+
+            # Línea discontinua por año (mismo color que Consumed)
+            fig_con.add_scatter(
+                x=df_a["Mes"],
+                y=df_a["Consumed"],
+                mode="lines",
+                name=f"Trend {año}",
+                line=dict(
+                    color=colores_consumed[idx % len(colores_consumed)],
+                    width=1.5,
+                    dash="dash"
+                ),
+                showlegend=False
+            )
 
         fig_con.update_layout(
             barmode="relative",
             plot_bgcolor="#f4f4f4",
             paper_bgcolor="#f4f4f4",
             font_color="#222",
-            height=500,
-            title="Consumo mensual — Total vs PV Used / From Netz"
+            height=550,
+            title="Consumo mensual — comparación multiaño"
         )
 
         st.plotly_chart(fig_con, use_container_width=True)
-
+        
     # =========================================================
     # 4) 📅 VISTA ANUAL
     # =========================================================
