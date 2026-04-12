@@ -5,20 +5,12 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Dashboard Solar", layout="wide")
 
-# ---------------------------------------------------------
-# CSS PARA COLUMNA IZQUIERDA (sidebar visual)
-# ---------------------------------------------------------
 st.markdown("""
 <style>
-.left-column {
-    background-color: #f0f0f0;
-    padding: 20px;
-    border-radius: 8px;
-}
+/* objetivo: reducir margen del bloque que envuelve pills */
+div[data-testid^="stPills"] { margin-top: 0px !important; padding-top: 0px !important; }
 </style>
 """, unsafe_allow_html=True)
-
-st.title("⚡ Dashboard Solar — Producción, Consumo y Flujo de Red")
 
 # ---------------------------------------------------------
 # ORDEN PERSONALIZADO DE MESES
@@ -80,7 +72,6 @@ def cargar_y_transformar(file):
 
     return df_long
 
-
 # ---------------------------------------------------------
 # CARGA AUTOMÁTICA DEL ARCHIVO POR DEFECTO
 # ---------------------------------------------------------
@@ -103,33 +94,93 @@ else:
         st.stop()
 
 # ---------------------------------------------------------
+# COMPONENTE REUTILIZABLE DE PILLS
+# ---------------------------------------------------------
+def _toggle_all_callback(key_prefix, items):
+    sel_key = f"{key_prefix}_selected"
+    show_all_key = f"{key_prefix}_show_all"
+    ver_key = f"{key_prefix}_version"
+
+    # Alternar selección completa
+    if st.session_state.get(show_all_key, False):
+        st.session_state[sel_key] = []
+        st.session_state[show_all_key] = False
+    else:
+        st.session_state[sel_key] = items.copy()
+        st.session_state[show_all_key] = True
+
+    # Forzar nueva instancia de pills cambiando la versión
+    st.session_state[ver_key] = st.session_state.get(ver_key, 0) + 1
+
+def pills_selector(label, items, key_prefix, default_selected=None):
+    # Título compacto
+    st.markdown(f"<div style='font-size:14px; font-weight:600; margin:0 0 4px 0'>{label}</div>", unsafe_allow_html=True)
+
+    items = [str(i) for i in items]
+    sel_key = f"{key_prefix}_selected"
+    ver_key = f"{key_prefix}_version"
+    show_all_key = f"{key_prefix}_show_all"
+
+    # Inicializar estado
+    if sel_key not in st.session_state:
+        st.session_state[sel_key] = items.copy() if default_selected is None else [str(x) for x in default_selected]
+    if ver_key not in st.session_state:
+        st.session_state[ver_key] = 0
+    # show_all_key se sincroniza más abajo según la selección real
+
+    # Creamos dos placeholders: uno para el botón (arriba) y otro para las pills (debajo)
+    ph_btn = st.empty()
+    ph_pills = st.empty()
+
+    # Renderizamos las pills primero dentro de su placeholder para obtener la selección actual
+    pills_key = f"{key_prefix}_pills_v{st.session_state[ver_key]}"
+    with ph_pills.container():
+        new_selected = st.pills(
+            "",
+            options=items,
+            selection_mode="multi",
+            default=st.session_state[sel_key],
+            key=pills_key
+        )
+
+    # Actualizamos el estado según la selección manual del usuario
+    st.session_state[sel_key] = new_selected
+    st.session_state[show_all_key] = (len(new_selected) == len(items))
+
+    # Ahora renderizamos el botón en su placeholder (aparecerá arriba) usando el estado actualizado
+    btn_label = "Deseleccionar todo" if st.session_state.get(show_all_key, False) else "Seleccionar todo"
+    # Usamos on_click para alternar y forzar re-render de las pills
+    ph_btn.button(
+        btn_label,
+        key=f"{key_prefix}_btn",
+        on_click=_toggle_all_callback,
+        args=(key_prefix, items)
+    )
+
+    # Devolver en tipo original si procede
+    try:
+        return [int(x) for x in st.session_state[sel_key]]
+    except:
+        return st.session_state[sel_key]
+
+# Ejemplo de uso
+# años_sel = pills_selector("Años", [2023,2024,2025,2026], key_prefix="anos", default_selected=[2025])
+
+# ---------------------------------------------------------
 # LAYOUT PRINCIPAL: COLUMNA IZQUIERDA (FILTROS + KPIs)
 # ---------------------------------------------------------
 col_left, col_right = st.columns([1, 3])
 
 with col_left:
-    st.markdown('<div class="left-column">', unsafe_allow_html=True)
-
     st.subheader("⚙️ Filtros")
 
-    años_sel = st.multiselect(
-        "Años",
-        sorted(df_long["Año"].unique()),
-        default=[2025]
-    )
+    años_disponibles = sorted(df_long["Año"].unique())
+    meses_disponibles = orden_meses
+    tipos_disponibles = ["Produced", "Consumed", "PV Used", "To Netz", "From Netz"]
 
-    meses_sel = st.multiselect(
-        "Meses",
-        orden_meses,
-        default=["Jun", "Jul"]
-    )
-
-    tipos_sel = st.multiselect(
-        "Tipos de Dato",
-        ["Produced", "Consumed", "PV Used", "To Netz", "From Netz"],
-        default=["Produced"]
-    )
-
+    años_sel = pills_selector("Años", años_disponibles, key_prefix="anos", default_selected=[2025])
+    meses_sel = pills_selector("Meses", meses_disponibles, key_prefix="meses", default_selected=["Jun", "Jul"])
+    tipos_sel = pills_selector("Tipos de dato", tipos_disponibles, key_prefix="tipos", default_selected=["Produced"])
     dias = sorted(df_long[
         (df_long["Año"].isin(años_sel)) &
         (df_long["Mes"].isin(meses_sel))
@@ -152,9 +203,9 @@ with col_left:
     st.subheader("🔍 KPIs del Período Seleccionado")
 
     df_kpi = df_long[
-        (df_long["Año"].isin(años_sel)) &
-        (df_long["Mes"].isin(meses_sel)) &
-        (df_long["Día"] >= rango_dias[0]) &
+        (df_long["Año"].isin(años_sel)) & 
+        (df_long["Mes"].isin(meses_sel)) & 
+        (df_long["Día"] >= rango_dias[0]) & 
         (df_long["Día"] <= rango_dias[1])
     ]
 
@@ -171,27 +222,11 @@ with col_left:
     dep_pct = (from_netz/con*100) if con > 0 else 0
     exc_pct = (to_netz/pro*100) if pro > 0 else 0
 
-    st.markdown("""
-    <style>
-    .kpi-block {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    st.markdown('<div class="kpi-block">', unsafe_allow_html=True)
-
     st.metric("Producción Total", f"{pro:.2f} kWh")
     st.metric("Consumo Total", f"{con:.2f} kWh")
     st.metric("Autoconsumo", f"{pv_used:.1f} kWh / {autoc_pct:.1f}%")
     st.metric("Dependencia Red", f"{from_netz:.1f} kWh / {dep_pct:.1f}%")
     st.metric("Excedente", f"{to_netz:.1f} kWh / {exc_pct:.1f}%")
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
 
 # ---------------------------------------------------------
 # COLUMNA DERECHA: PESTAÑAS CON TODAS LAS GRÁFICAS
@@ -235,115 +270,19 @@ with col_right:
 
         fig.update_layout(
             hovermode="x unified",
-            plot_bgcolor="#f4f4f4",      # fondo más claro
-            paper_bgcolor="#f4f4f4",
-            font_color="#222",
-            legend_title_text="Año - Mes - Tipo",
-            legend=dict(
-                bgcolor="rgba(255,255,255,0.8)",
-                bordercolor="#cccccc",
-                borderwidth=1,
-                font=dict(
-                    color="#222",
-                    size=9          # tamaño pequeño para que quepan al menos ~12 entradas
-                ),
-                orientation="v",
-                yanchor="top",
-                y=1,
-                xanchor="left",
-                x=1.02,
-                itemwidth=40
-            ),
-            margin=dict(l=40, r=150, t=60, b=40),  # espacio extra para la leyenda
-            height=550
-        )
-        fig.update_yaxes(title_text="kWh")
-
-        # Máximo 31 días + líneas verticales por día
-        fig.update_xaxes(
-            range=[1, 31],
-            dtick=1,
-            showgrid=True,
-            gridcolor="rgba(0,0,0,0.08)",
-            gridwidth=1
-        )
-
-        # Líneas horizontales cada 5 kWh
-        fig.update_yaxes(
-            dtick=5,
-            showgrid=True,
-            gridcolor="rgba(0,0,0,0.08)",
-            gridwidth=1
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-        # ---------------------------------------------------------
-        # 📊 Evolución diaria (versión en barras)
-        # ---------------------------------------------------------
-        st.subheader("📊 Evolución Diaria — Barras")
-
-        if df_filtrado.empty:
-            st.warning("Hefe, no hay datos para mostrar!")
-            st.stop()
-            
-        fig_bar = px.bar(
-            df_filtrado,
-            x="Día",
-            y="Valor",
-            color="Serie",
-            barmode="group",   # ← barras independientes
-            color_discrete_sequence=px.colors.qualitative.Set1
-        )
-
-        fig_bar.update_layout(
-            hovermode="x unified",
             plot_bgcolor="#f4f4f4",
             paper_bgcolor="#f4f4f4",
             font_color="#222",
             legend_title_text="Año - Mes - Tipo",
-            legend=dict(
-                bgcolor="rgba(255,255,255,0.85)",
-                bordercolor="#cccccc",
-                borderwidth=1,
-                font=dict(color="#222", size=9),
-                orientation="v",
-                yanchor="top",
-                y=1,
-                xanchor="left",
-                x=1.02,
-                itemwidth=40,
-                tracegroupgap=4
-            ),
             margin=dict(l=40, r=150, t=60, b=40),
             height=550
         )
 
-        # Líneas verticales por día
-        fig_bar.update_xaxes(
-            range=[0.5, 31.5],   # ← margen lateral
+        st.plotly_chart(fig, use_container_width=True)
 
-            dtick=1,
-            showgrid=True,
-            gridcolor="rgba(0,0,0,0.08)",
-            gridwidth=1,
-            title_text="Día"
-        )
-
-        # Líneas horizontales cada 5 kWh
-        fig_bar.update_yaxes(
-            dtick=5,
-            showgrid=True,
-            gridcolor="rgba(0,0,0,0.08)",
-            gridwidth=1,
-            title_text="kWh"
-        )
-
-        st.plotly_chart(fig_bar, use_container_width=True)
-
-    # ---------------------------------------------------------
-    # ANIMACIÓN MENSUAL
-    # ---------------------------------------------------------
+    # =========================================================
+    # 2) 🎞 EVOLUCIÓN MENSUAL
+    # =========================================================
     with tab2:
         st.subheader("🎞 Evolución Mensual (animación)")
 
@@ -367,125 +306,17 @@ with col_right:
             plot_bgcolor="#f4f4f4",
             paper_bgcolor="#f4f4f4",
             font_color="#222",
-            legend_title_text="Año - Mes - Tipo",
-            legend=dict(
-                bgcolor="rgba(255,255,255,0.8)",
-                bordercolor="#cccccc",
-                borderwidth=1,
-                font=dict(size=9),
-                orientation="v",
-                yanchor="top",
-                y=1,
-                xanchor="left",
-                x=1.02,
-                itemwidth=40
-            ),
             margin=dict(l=40, r=150, t=60, b=40),
             height=550
         )
 
-        # Ejes homogéneos
-        fig_anim_mes.update_xaxes(
-            range=[1, 31],
-            dtick=1,
-            showgrid=True,
-            gridcolor="rgba(0,0,0,0.08)",
-            gridwidth=1,
-            title_text="Día"
-        )
-
-        fig_anim_mes.update_yaxes(
-            dtick=5,
-            showgrid=True,
-            gridcolor="rgba(0,0,0,0.08)",
-            gridwidth=1,
-            title_text="kWh"
-        )
-
         st.plotly_chart(fig_anim_mes, use_container_width=True)
 
-        # ---------------------------------------------------------
-        # VISTA MENSUAL AGREGADA
-        # ---------------------------------------------------------
-        st.subheader("📆 Vista Mensual")
-
-        if df_filtrado.empty:
-            st.warning("Hefe, no hay datos para mostrar!")
-            st.stop()
-            
-        df_mensual = df_filtrado.groupby(["Año", "Mes", "Tipo"])["Valor"].sum().reset_index()
-        df_mensual["Etiqueta"] = df_mensual["Año"].astype(str) + " - " + df_mensual["Tipo"]
-
-        fig_mensual = px.bar(
-            df_mensual,
-            x="Mes",
-            y="Valor",
-            color="Etiqueta",
-            animation_frame="Año",
-            barmode="group",
-            color_discrete_sequence=px.colors.qualitative.Set1
-        )
-
-        fig_mensual.update_layout(
-            hovermode="x unified",
-            plot_bgcolor="#f4f4f4",
-            paper_bgcolor="#f4f4f4",
-            font_color="#222",
-            legend=dict(
-                bgcolor="rgba(255,255,255,0.8)",
-                bordercolor="#cccccc",
-                borderwidth=1,
-                font=dict(size=9)
-            ),
-            margin=dict(l=40, r=40, t=60, b=40),
-            height=550
-        )
-
-        # Calcular el máximo del periodo seleccionado
-        ymax = df_mensual["Valor"].max()
-
-        # Determinar dtick dinámico según el orden de magnitud
-        if ymax <= 20:
-            dtick = 1
-        elif ymax <= 50:
-            dtick = 5
-        elif ymax <= 200:
-            dtick = 10
-        elif ymax <= 500:
-            dtick = 50
-        elif ymax <= 2000:
-            dtick = 100
-        else:
-            dtick = 200
-
-        # Redondear ymax hacia arriba al siguiente múltiplo del dtick
-        ymax_redondeado = ((ymax // dtick) + 1) * dtick
-
-        fig_mensual.update_yaxes(
-            range=[0, ymax_redondeado],
-            tickmode="linear",
-            dtick=dtick,
-            showgrid=True,
-            gridcolor="rgba(0,0,0,0.08)",
-            gridwidth=1,
-            zeroline=False,
-            title_text="kWh"
-        )
-        
-        fig_mensual.update_xaxes(
-            showgrid=True,
-            gridcolor="rgba(0,0,0,0.08)",
-            gridwidth=1,
-            title_text="Mes"
-        )
-
-        st.plotly_chart(fig_mensual, use_container_width=True)
-
-        # ---------------------------------------------------------
-        # NUEVA GRÁFICA MENSUAL — PRODUCCIÓN (CORREGIDA)
-        # ---------------------------------------------------------
+    # =========================================================
+    # 3) 📊 DISTRIBUCIÓN MENSUAL (Producción / Consumo)
+    # =========================================================
     with tab3:
-        st.subheader("🔆 Producción Mensual — PV Used / To Netz")
+        st.subheader("🔆 Producción mensual — desglose PV Used / To Netz")
 
         df_prod = df_kpi[df_kpi["Tipo"].isin(["Produced", "PV Used", "To Netz"])]
         df_prod_m = df_prod.groupby(["Año", "Mes", "Tipo"])["Valor"].sum().reset_index()
@@ -498,79 +329,57 @@ with col_right:
         ).reset_index()
 
         dfp["Mes"] = pd.Categorical(dfp["Mes"], categories=orden_meses, ordered=True)
-        dfp = dfp.sort_values(["Mes", "Año"])
+        dfp = dfp.sort_values(["Año", "Mes"])
 
         fig_prod = go.Figure()
 
-        # Paletas por año
-        años_unicos = sorted(dfp["Año"].unique())
-        colores_produced = ["#F9E79F", "#F7DC6F", "#F4D03F", "#F1C40F"]
-        colores_pvused   = ["#D5D8DC", "#A6ACAF", "#7F8C8D", "#566573"]
-        colores_tonetz   = ["#85C1E9", "#5DADE2", "#3498DB", "#2E86C1"]
+        fig_prod.add_bar(
+            x=dfp["Mes"],
+            y=dfp["Produced"],
+            name="Produced",
+            marker_color="#F7DC6F",
+            offsetgroup=0
+        )
 
-        for idx, año in enumerate(años_unicos):
-            df_a = dfp[dfp["Año"] == año]
+        fig_prod.add_bar(
+            x=dfp["Mes"],
+            y=dfp["PV Used"],
+            name="PV Used",
+            marker_color="#A6ACAF",
+            offsetgroup=1
+        )
 
-            # PRODUCED (independiente)
-            fig_prod.add_bar(
-                x=df_a["Mes"],
-                y=df_a["Produced"],
-                name=f"Produced {año}",
-                marker_color=colores_produced[idx % len(colores_produced)],
-                offsetgroup=f"{año}_prod",     # ← independiente
-                legendgroup=f"{año}_prod"
-            )
+        fig_prod.add_bar(
+            x=dfp["Mes"],
+            y=dfp["To Netz"],
+            name="To Netz",
+            marker_color="#2980B9",
+            offsetgroup=1
+        )
 
-            # PV USED (apilado)
-            fig_prod.add_bar(
-                x=df_a["Mes"],
-                y=df_a["PV Used"],
-                name=f"PV Used {año}",
-                marker_color=colores_pvused[idx % len(colores_pvused)],
-                offsetgroup=f"{año}_stack",    # ← mismo grupo apilado
-                legendgroup=f"{año}_stack"
-            )
-
-            # TO NETZ (apilado)
-            fig_prod.add_bar(
-                x=df_a["Mes"],
-                y=df_a["To Netz"],
-                name=f"To Netz {año}",
-                marker_color=colores_tonetz[idx % len(colores_tonetz)],
-                offsetgroup=f"{año}_stack",    # ← mismo grupo apilado
-                legendgroup=f"{año}_stack"
-            )
-
-            # Línea discontinua por año
-            fig_prod.add_scatter(
-                x=df_a["Mes"],
-                y=df_a["Produced"],
-                mode="lines",
-                name=f"Trend {año}",
-                line=dict(
-                    color=colores_produced[idx % len(colores_produced)],
-                    width=1.5,
-                    dash="dash"
-                ),
-                showlegend=False
-            )
+        fig_prod.add_scatter(
+            x=dfp["Mes"],
+            y=dfp["Produced"],
+            mode="lines",
+            showlegend=False,
+            line=dict(color="#2980B9", width=1, dash="dash")
+        )
 
         fig_prod.update_layout(
             barmode="relative",
             plot_bgcolor="#f4f4f4",
             paper_bgcolor="#f4f4f4",
             font_color="#222",
-            height=550,
-            title="Producción mensual — comparación multiaño"
+            height=500,
+            title="Producción mensual — Total vs PV Used / To Netz"
         )
 
         st.plotly_chart(fig_prod, use_container_width=True)
 
-
         # ---------------------------------------------------------
-        # NUEVA GRÁFICA MENSUAL — CONSUMO (CORREGIDA)
+        # CONSUMO
         # ---------------------------------------------------------
-        st.subheader("⚡ Consumo Mensual — PV Used / From Netz")
+        st.subheader("⚡ Consumo mensual — desglose PV Used / From Netz")
 
         df_con = df_kpi[df_kpi["Tipo"].isin(["Consumed", "PV Used", "From Netz"])]
         df_con_m = df_con.groupby(["Año", "Mes", "Tipo"])["Valor"].sum().reset_index()
@@ -583,84 +392,59 @@ with col_right:
         ).reset_index()
 
         dfc["Mes"] = pd.Categorical(dfc["Mes"], categories=orden_meses, ordered=True)
-        dfc = dfc.sort_values(["Mes", "Año"])
+        dfc = dfc.sort_values(["Año", "Mes"])
 
         fig_con = go.Figure()
 
-        # Paletas por año (coherentes con Producción)
-        años_unicos = sorted(dfc["Año"].unique())
-        colores_consumed = ["#A6ACAF", "#909497", "#7B7D7D", "#626567"]
-        colores_pvused   = ["#F9E79F", "#F7DC6F", "#F4D03F", "#F1C40F"]
-        colores_fromnetz = ["#85C1E9", "#5DADE2", "#3498DB", "#2E86C1"]
+        fig_con.add_bar(
+            x=dfc["Mes"],
+            y=dfc["Consumed"],
+            name="Consumed",
+            marker_color="#A6ACAF",
+            offsetgroup=0
+        )
 
-        for idx, año in enumerate(años_unicos):
-            df_a = dfc[dfc["Año"] == año]
+        fig_con.add_bar(
+            x=dfc["Mes"],
+            y=dfc["PV Used"],
+            name="PV Used",
+            marker_color="#F7DC6F",
+            offsetgroup=1
+        )
 
-            # CONSUMED (independiente)
-            fig_con.add_bar(
-                x=df_a["Mes"],
-                y=df_a["Consumed"],
-                name=f"Consumed {año}",
-                marker_color=colores_consumed[idx % len(colores_consumed)],
-                offsetgroup=f"{año}_cons",     # ← independiente
-                legendgroup=f"{año}_cons"
-            )
+        fig_con.add_bar(
+            x=dfc["Mes"],
+            y=dfc["From Netz"],
+            name="From Netz",
+            marker_color="#2980B9",
+            offsetgroup=1
+        )
 
-            # PV USED (apilado)
-            fig_con.add_bar(
-                x=df_a["Mes"],
-                y=df_a["PV Used"],
-                name=f"PV Used {año}",
-                marker_color=colores_pvused[idx % len(colores_pvused)],
-                offsetgroup=f"{año}_stack",    # ← grupo apilado
-                legendgroup=f"{año}_stack"
-            )
-
-            # FROM NETZ (apilado)
-            fig_con.add_bar(
-                x=df_a["Mes"],
-                y=df_a["From Netz"],
-                name=f"From Netz {año}",
-                marker_color=colores_fromnetz[idx % len(colores_fromnetz)],
-                offsetgroup=f"{año}_stack",    # ← mismo grupo apilado
-                legendgroup=f"{año}_stack"
-            )
-
-            # Línea discontinua por año
-            fig_con.add_scatter(
-                x=df_a["Mes"],
-                y=df_a["Consumed"],
-                mode="lines",
-                name=f"Trend {año}",
-                line=dict(
-                    color=colores_consumed[idx % len(colores_consumed)],
-                    width=1.5,
-                    dash="dash"
-                ),
-                showlegend=False
-            )
+        fig_con.add_scatter(
+            x=dfc["Mes"],
+            y=dfc["Consumed"],
+            mode="lines",
+            showlegend=False,
+            line=dict(color="#2980B9", width=1, dash="dash")
+        )
 
         fig_con.update_layout(
             barmode="relative",
             plot_bgcolor="#f4f4f4",
             paper_bgcolor="#f4f4f4",
             font_color="#222",
-            height=550,
-            title="Consumo mensual — comparación multiaño"
+            height=500,
+            title="Consumo mensual — Total vs PV Used / From Netz"
         )
 
         st.plotly_chart(fig_con, use_container_width=True)
-    # ---------------------------------------------------------
-    # VISTA ANUAL AGREGADA
-    # ---------------------------------------------------------
+
+    # =========================================================
+    # 4) 📅 VISTA ANUAL
+    # =========================================================
     with tab4:
         st.subheader("📅 Vista Anual")
 
-        if df_filtrado.empty:
-            st.warning("Hefe, no hay datos para mostrar!")
-            st.stop()
-            
-        # Usar SIEMPRE todos los datos del Excel
         df_anual_full = df_long.groupby(["Año", "Tipo"])["Valor"].sum().reset_index()
 
         tipos = ["Produced", "Consumed", "PV Used", "To Netz", "From Netz"]
@@ -673,13 +457,11 @@ with col_right:
 
                 df_t = df_anual_full[df_anual_full["Tipo"] == t].sort_values("Año")
 
-                # Convertir años a numérico para permitir width en barras
                 x_numeric = list(range(len(df_t)))
                 x_labels = df_t["Año"].astype(str).tolist()
 
                 fig = go.Figure()
 
-                # --- Barras finas ---
                 fig.add_trace(go.Bar(
                     x=x_numeric,
                     y=df_t["Valor"],
@@ -687,7 +469,6 @@ with col_right:
                     width=0.25
                 ))
 
-                # --- Línea de tendencia ---
                 fig.add_trace(go.Scatter(
                     x=x_numeric,
                     y=df_t["Valor"],
@@ -696,48 +477,32 @@ with col_right:
                     marker=dict(size=5)
                 ))
 
-                # --- Estética profesional ---
                 fig.update_layout(
-                height=240,
-                margin=dict(l=0, r=10, t=25, b=40),
-                plot_bgcolor="#f7f7f7",
-                paper_bgcolor="#f7f7f7",
-                font_color="#333",
-                showlegend=False,
-                xaxis=dict(
-                    title="",
-                    tickfont=dict(size=9),
-                    tickmode="array",
-                    tickvals=x_numeric,
-                    ticktext=x_labels,
-                    showgrid=False,
-                    zeroline=False
-                ),
-                yaxis=dict(
-                    title="",  # quitamos el título del eje
-                    tickfont=dict(size=9),
-                    showgrid=True,
-                    gridcolor="rgba(0,0,0,0.15)",
-                    zeroline=False
-                ),
-                annotations=[
-                    dict(
-                        xref="paper",
-                        yref="paper",
-                        x=0,          # extremo izquierdo
-                        y=-0.22,      # debajo del eje
-                        text="kWh",
-                        showarrow=False,
-                        font=dict(size=10, color="#555")
+                    height=240,
+                    margin=dict(l=0, r=10, t=25, b=40),
+                    plot_bgcolor="#f7f7f7",
+                    paper_bgcolor="#f7f7f7",
+                    font_color="#333",
+                    showlegend=False,
+                    xaxis=dict(
+                        tickmode="array",
+                        tickvals=x_numeric,
+                        ticktext=x_labels,
+                        showgrid=False,
+                        zeroline=False
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
+                        gridcolor="rgba(0,0,0,0.15)",
+                        zeroline=False
                     )
-                ]
-            )
+                )
 
                 st.plotly_chart(fig, use_container_width=True, key=f"anual_{t}")
 
-    # ---------------------------------------------------------
-    # TABLA FINAL EN FORMATO WIDE
-    # ---------------------------------------------------------
+    # =========================================================
+    # 5) 📄 TABLA FINAL
+    # =========================================================
     with tab5:
         st.subheader("📄 Tabla Datos")
 
