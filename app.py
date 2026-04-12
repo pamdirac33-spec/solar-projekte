@@ -5,13 +5,6 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Dashboard Solar", layout="wide")
 
-st.markdown("""
-<style>
-/* objetivo: reducir margen del bloque que envuelve pills */
-div[data-testid^="stPills"] { margin-top: 0px !important; padding-top: 0px !important; }
-</style>
-""", unsafe_allow_html=True)
-
 # ---------------------------------------------------------
 # ORDEN PERSONALIZADO DE MESES
 # ---------------------------------------------------------
@@ -96,91 +89,77 @@ else:
 # ---------------------------------------------------------
 # COMPONENTE REUTILIZABLE DE PILLS
 # ---------------------------------------------------------
-def _toggle_all_callback(key_prefix, items):
-    sel_key = f"{key_prefix}_selected"
-    show_all_key = f"{key_prefix}_show_all"
-    ver_key = f"{key_prefix}_version"
-
-    # Alternar selección completa
-    if st.session_state.get(show_all_key, False):
-        st.session_state[sel_key] = []
-        st.session_state[show_all_key] = False
-    else:
-        st.session_state[sel_key] = items.copy()
-        st.session_state[show_all_key] = True
-
-    # Forzar nueva instancia de pills cambiando la versión
-    st.session_state[ver_key] = st.session_state.get(ver_key, 0) + 1
-
-def pills_selector(label, items, key_prefix, default_selected=None):
-    # Título compacto
-    st.markdown(f"<div style='font-size:14px; font-weight:600; margin:0 0 4px 0'>{label}</div>", unsafe_allow_html=True)
+def pills_selector(label, items, default_selected=None, key_prefix="pills"):
+    st.markdown(f"#### {label}")
 
     items = [str(i) for i in items]
-    sel_key = f"{key_prefix}_selected"
-    ver_key = f"{key_prefix}_version"
-    show_all_key = f"{key_prefix}_show_all"
 
-    # Inicializar estado
-    if sel_key not in st.session_state:
-        st.session_state[sel_key] = items.copy() if default_selected is None else [str(x) for x in default_selected]
-    if ver_key not in st.session_state:
-        st.session_state[ver_key] = 0
-    # show_all_key se sincroniza más abajo según la selección real
+    if default_selected is None:
+        default_selected = []
+    default_selected = [str(i) for i in default_selected]
 
-    # Creamos dos placeholders: uno para el botón (arriba) y otro para las pills (debajo)
-    ph_btn = st.empty()
-    ph_pills = st.empty()
+    state_key = f"{key_prefix}_state"
+    version_key = f"{key_prefix}_version"
 
-    # Renderizamos las pills primero dentro de su placeholder para obtener la selección actual
-    pills_key = f"{key_prefix}_pills_v{st.session_state[ver_key]}"
-    with ph_pills.container():
-        new_selected = st.pills(
-            "",
-            options=items,
-            selection_mode="multi",
-            default=st.session_state[sel_key],
-            key=pills_key
-        )
+    # Estado inicial
+    if state_key not in st.session_state:
+        st.session_state[state_key] = default_selected.copy()
 
-    # Actualizamos el estado según la selección manual del usuario
-    st.session_state[sel_key] = new_selected
-    st.session_state[show_all_key] = (len(new_selected) == len(items))
+    if version_key not in st.session_state:
+        st.session_state[version_key] = 0
 
-    # Ahora renderizamos el botón en su placeholder (aparecerá arriba) usando el estado actualizado
-    btn_label = "Deseleccionar todo" if st.session_state.get(show_all_key, False) else "Seleccionar todo"
-    # Usamos on_click para alternar y forzar re-render de las pills
-    ph_btn.button(
-        btn_label,
-        key=f"{key_prefix}_btn",
-        on_click=_toggle_all_callback,
-        args=(key_prefix, items)
+    selected = st.session_state[state_key]
+
+    # Detectar si todo está seleccionado
+    all_selected = len(selected) == len(items)
+    label_btn = "Deseleccionar todo" if all_selected else "Seleccionar todo"
+
+    # BOTÓN SELECT/DESELECT ALL
+    if st.button(label_btn, key=f"{key_prefix}_toggle"):
+        st.session_state[state_key] = [] if all_selected else items.copy()
+        st.session_state[version_key] += 1
+        st.rerun()
+
+    # PILLS REALES (clave dinámica)
+    pills_key = f"{key_prefix}_pills_v{st.session_state[version_key]}"
+
+    new_selected = st.pills(
+        label="",
+        options=items,
+        default=st.session_state[state_key],
+        selection_mode="multi",
+        key=pills_key
     )
 
-    # Devolver en tipo original si procede
+    # Si el usuario tocó una pill → actualizar estado y rerun
+    if new_selected != st.session_state[state_key]:
+        st.session_state[state_key] = new_selected
+        st.session_state[version_key] += 1
+        st.rerun()
+
+    # Devolver enteros si aplica
     try:
-        return [int(x) for x in st.session_state[sel_key]]
+        return [int(x) for x in st.session_state[state_key]]
     except:
-        return st.session_state[sel_key]
-
-# Ejemplo de uso
-# años_sel = pills_selector("Años", [2023,2024,2025,2026], key_prefix="anos", default_selected=[2025])
-
+        return st.session_state[state_key]   
 # ---------------------------------------------------------
 # LAYOUT PRINCIPAL: COLUMNA IZQUIERDA (FILTROS + KPIs)
 # ---------------------------------------------------------
 col_left, col_right = st.columns([1, 3])
 
 with col_left:
+    st.markdown('<div class="left-column">', unsafe_allow_html=True)
+
     st.subheader("⚙️ Filtros")
 
     años_disponibles = sorted(df_long["Año"].unique())
     meses_disponibles = orden_meses
     tipos_disponibles = ["Produced", "Consumed", "PV Used", "To Netz", "From Netz"]
 
-    años_sel = pills_selector("Años", años_disponibles, key_prefix="anos", default_selected=[2025])
-    meses_sel = pills_selector("Meses", meses_disponibles, key_prefix="meses", default_selected=["Jun", "Jul"])
-    tipos_sel = pills_selector("Tipos de dato", tipos_disponibles, key_prefix="tipos", default_selected=["Produced"])
+    años_sel = pills_selector("Años", años_disponibles, default_selected=[2025], key_prefix="anos")
+    meses_sel = pills_selector("Meses", meses_disponibles, default_selected=["Jun", "Jul"], key_prefix="meses")
+    tipos_sel = pills_selector("Tipos de dato", tipos_disponibles, default_selected=["Produced"], key_prefix="tipos")
+
     dias = sorted(df_long[
         (df_long["Año"].isin(años_sel)) &
         (df_long["Mes"].isin(meses_sel))
