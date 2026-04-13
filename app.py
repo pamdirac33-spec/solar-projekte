@@ -145,7 +145,7 @@ def pills_selector(label, items, default_selected=None, key_prefix="pills"):
 # ---------------------------------------------------------
 # LAYOUT PRINCIPAL: COLUMNA IZQUIERDA (FILTROS + KPIs)
 # ---------------------------------------------------------
-col_left, col_right = st.columns([1, 3])
+col_left, col_right = st.columns([1, 4])
 
 with col_left:
     st.markdown('<div class="left-column">', unsafe_allow_html=True)
@@ -244,7 +244,8 @@ with col_right:
             color="Serie",
             line_group="Serie",
             markers=True,
-            color_discrete_sequence=px.colors.qualitative.Set1
+            color_discrete_sequence=px.colors.qualitative.Set1,
+            render_mode="svg"
         )
 
         fig.update_layout(
@@ -278,6 +279,7 @@ with col_right:
             animation_frame="Mes",
             range_y=[0, df_filtrado["Valor"].max() * 1.1],
             color_discrete_sequence=px.colors.qualitative.Set1,
+            render_mode="svg"
         )
 
         fig_anim_mes.update_layout(
@@ -368,7 +370,7 @@ with col_right:
             paper_bgcolor="#f4f4f4",
             font_color="#222",
             height=550,
-            title="Producción mensual — comparación multiaño"
+            title="Producción Mensual"
         )
 
         st.plotly_chart(fig_prod, use_container_width=True)
@@ -450,7 +452,7 @@ with col_right:
             paper_bgcolor="#f4f4f4",
             font_color="#222",
             height=550,
-            title="Consumo mensual — comparación multiaño"
+            title="Consumo Mensual"
         )
 
         st.plotly_chart(fig_con, use_container_width=True)
