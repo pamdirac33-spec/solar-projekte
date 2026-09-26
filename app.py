@@ -95,17 +95,15 @@ def cargar_y_transformar(file):
 ruta_defecto = "SolarAnlage-Data.xlsx"
 
 archivo_subido = st.file_uploader(
-    "Sube tu archivo Excel (opcional).",
+    f"Sube tu archivo excel (por defecto, usando {ruta_defecto})",
     type=["xlsx"]
 )
 
 if archivo_subido is not None:
     df_long = cargar_y_transformar(archivo_subido)
-    st.success("Archivo cargado desde el uploader.")
 else:
     try:
         df_long = cargar_y_transformar(ruta_defecto)
-        st.info(f"Usando archivo por defecto: {ruta_defecto}")
     except Exception as e:
         st.error("No se pudo cargar el archivo por defecto. Sube un archivo manualmente.")
         st.stop()
@@ -201,30 +199,30 @@ with st.sidebar:
 # CUERPO PRINCIPAL: KPIS EN UNA SOLA FILA + TABS
 # ---------------------------------------------------------
 
-    # ---------------------------------------------------------
-    # KPIs
-    # ---------------------------------------------------------
-    st.subheader("🔍 KPIs del Período Seleccionado")
+# ----------
+# KPIs
+# ----------
+st.subheader("🔍 KPIs del Período Seleccionado")
 
-    df_kpi = df_long[
-        (df_long["Año"].isin(años_sel)) & 
-        (df_long["Mes"].isin(meses_sel)) & 
-        (df_long["Día"] >= rango_dias[0]) & 
-        (df_long["Día"] <= rango_dias[1])
-    ]
+df_kpi = df_long[
+    (df_long["Año"].isin(años_sel)) & 
+    (df_long["Mes"].isin(meses_sel)) & 
+    (df_long["Día"] >= rango_dias[0]) & 
+    (df_long["Día"] <= rango_dias[1])
+]
 
-    def get_val(tipo):
-        return df_kpi[df_kpi["Tipo"] == tipo]["Valor"].sum()
+def get_val(tipo):
+    return df_kpi[df_kpi["Tipo"] == tipo]["Valor"].sum()
 
-    pro = get_val("Produced")
-    con = get_val("Consumed")
-    pv_used = get_val("PV Used")
-    to_netz = get_val("To Netz")
-    from_netz = get_val("From Netz")
+pro = get_val("Produced")
+con = get_val("Consumed")
+pv_used = get_val("PV Used")
+to_netz = get_val("To Netz")
+from_netz = get_val("From Netz")
 
-    autoc_pct = (pv_used/pro*100) if pro > 0 else 0
-    dep_pct = (from_netz/con*100) if con > 0 else 0
-    exc_pct = (to_netz/pro*100) if pro > 0 else 0
+autoc_pct = (pv_used/pro*100) if pro > 0 else 0
+dep_pct = (from_netz/con*100) if con > 0 else 0
+exc_pct = (to_netz/pro*100) if pro > 0 else 0
 
 # Todos los KPIs en una sola fila usando 5 columnas
 kpi_cols = st.columns(5)
@@ -244,12 +242,13 @@ st.markdown("---")
 # ---------------------------------------------------------
 # PESTAÑAS CON LAS GRÁFICAS (JUSTO DEBAJO DE LOS KPIS)
 # ---------------------------------------------------------
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📈 Evolución Diaria",
     "🎞 Evolución Mensual",
     "📊 Distribución Mensual",
     "📅 Evolución Anual",
-    "📄 Tabla de Datos"
+    "📄 Tabla de Datos",
+    "ℹ️ Resources/Info"
 ])
 
 # =========================================================
@@ -672,3 +671,34 @@ with tab5:
         ).reset_index()
 
         st.dataframe(tabla_wide)
+
+# =========================================================
+# 6) ℹ️ RESOURCES / INFO
+# =========================================================
+with tab6:
+    st.markdown("""
+    ### ℹ️ About Dashboard Solar App
+    * **Script created by:** dJoZeR - Ingolstadt, 2026
+    * **Created with the help of:** Copilot and Gemini
+
+    ---
+
+    ### 📋 Estructura requerida del fichero Excel (`.xlsx`)
+    Para que el script pueda procesar e interpretar los datos correctamente, el archivo Excel debe cumplir con el siguiente formato de tabla (formato *wide*):
+
+    1. **Estructura de las tres primeras columnas (Cabeceras):**
+       * **Columna 1:** Debe contener el **Año** (ej. `2025`, `2026`).
+       * **Columna 2:** Debe contener el **Mes** utilizando abreviaturas en inglés/alemán correspondientes exactamente a esta lista: `Jan`, `Feb`, `Mar`, `Avr`, `Mai`, `Jun`, `Jul`, `Aug`, `Sep`, `Okt`, `Nov`, `Dez`.
+       * **Columna 3:** Debe contener el **Tipo de métrica energética**. El script traducirá automáticamente las siguientes abreviaturas internas:
+         * `Pro` → Convertido a **Produced** (Producción)
+         * `Con` → Convertido a **Consumed** (Consumo)
+         * `PV_used` → Convertido a **PV Used** (Autoconsumo directo)
+         * `to_netz` → Convertido a **To Netz** (Excedentes vertidos a la red)
+         * `from_netz` → Convertido a **From Netz** (Electricidad comprada de la red)
+
+    2. **Estructura de los días del mes (Columnas 4 en adelante):**
+       * A partir de la cuarta columna, cada cabecera debe representar un **día del mes** (números enteros del `1` al `31`).
+       * Las celdas correspondientes deben contener el valor numérico en **kWh** medido para ese día, mes, año y tipo de registro.
+
+    > **Nota importante:** Los días que no existan en meses más cortos (ej. el 30 o 31 de febrero) simplemente se pueden dejar vacíos o sin definir, ya que el script elimina automáticamente los valores nulos (`dropna`).
+    """)
