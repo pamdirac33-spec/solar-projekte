@@ -165,6 +165,7 @@ def pills_selector(label, items, default_selected=None, key_prefix="pills"):
     except:
         return st.session_state[state_key]   
 
+
 # ---------------------------------------------------------
 # BARRA LATERAL (ST.SIDEBAR): FILTROS CON SCROLL VERTICAL
 # ---------------------------------------------------------
@@ -175,9 +176,18 @@ with st.sidebar:
     meses_disponibles = orden_meses
     tipos_disponibles = ["Produced", "Consumed", "PV Used", "To Netz", "From Netz"]
 
-    años_sel = pills_selector("Años", años_disponibles, default_selected=[2025], key_prefix="anos")
-    meses_sel = pills_selector("Meses", meses_disponibles, default_selected=["Jun", "Jul"], key_prefix="meses")
-    tipos_sel = pills_selector("Tipos de dato", tipos_disponibles, default_selected=["Produced"], key_prefix="tipos")
+    # 1. Detectar automáticamente el año más reciente con datos
+    max_año = int(df_long["Año"].max())
+    
+    # 2. Detectar el último mes con datos dentro de ese año más reciente
+    df_max_ano = df_long[df_long["Año"] == max_año]
+    meses_presentes_ano = [m for m in orden_meses if m in df_max_ano["Mes"].astype(str).unique()]
+    ultimo_mes_por_defecto = [meses_presentes_ano[-1]] if meses_presentes_ano else [orden_meses[-1]]
+
+    # 3. Aplicar los valores por defecto automáticos
+    años_sel = pills_selector("Años", años_disponibles, default_selected=[max_año], key_prefix="anos")
+    meses_sel = pills_selector("Meses", meses_disponibles, default_selected=ultimo_mes_por_defecto, key_prefix="meses")
+    tipos_sel = pills_selector("Tipos de dato", tipos_disponibles, default_selected=["Produced","Consumed"], key_prefix="tipos")
 
     dias = sorted(df_long[
         (df_long["Año"].isin(años_sel)) &
@@ -293,10 +303,114 @@ with tab1:
         font_color="#222",
         legend_title_text="Año - Mes - Tipo",
         margin=dict(l=40, r=150, t=60, b=40),
-        height=550
+        height=550,
+        yaxis_title="kWh"
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # ---------------------------------------------------------
+    # NUEVA GRÁFICA: EVOLUCIÓN ANUAL COMPLETA (Línea Continua Ene - Dic)
+    # ---------------------------------------------------------
+    st.markdown("---")
+    st.subheader("📅 Evolución Anual Completa (01 Ene — 31 Dic)")
+
+    df_anual_completo = df_long[
+        (df_long["Año"].isin(años_sel)) &
+        (df_long["Tipo"].isin(tipos_sel))
+    ].copy()
+
+    if df_anual_completo.empty:
+        st.warning("No hay datos anuales para mostrar.")
+    else:
+        # 1. Creamos una Serie limpia que no incluya el mes
+        df_anual_completo["Serie_Anual"] = df_anual_completo["Año"].astype(str) + " - " + df_anual_completo["Tipo"]
+
+        # 2. Orden cronológico estricto
+        df_anual_completo["Mes_Num"] = df_anual_completo["Mes"].map(lambda m: orden_meses.index(m) + 1)
+        df_anual_completo = df_anual_completo.sort_values(["Año", "Mes_Num", "Día"])
+
+        # 3. SECUENCIA COMPARTIDA: Asignamos un índice único por cada combinación de Mes y Día para que todos los tipos compartan la misma X
+        dias_unicos = df_anual_completo[["Mes_Num", "Mes", "Día"]].drop_duplicates().sort_values(["Mes_Num", "Día"]).reset_index(drop=True)
+        dias_unicos["Secuencia_X"] = dias_unicos.index
+
+        # Mapeamos esa secuencia al DataFrame principal
+        df_anual_completo = df_anual_completo.merge(dias_unicos, on=["Mes_Num", "Mes", "Día"], how="left")
+
+        fig_anual = px.line(
+            df_anual_completo,
+            x="Secuencia_X",
+            y="Valor",
+            color="Serie_Anual",
+            line_group="Serie_Anual",
+            markers=False,
+            color_discrete_sequence=px.colors.qualitative.Set1,
+            render_mode="svg",
+            custom_data=["Año", "Mes", "Tipo", "Día"]
+        )
+
+        fig_anual.update_traces(
+            hovertemplate="<b>%{customdata[0]} - %{customdata[1]} (Día %{customdata[3]})</b><br><b>%{customdata[2]}:</b> %{y:.2f} kWh<extra></extra>"
+        )
+
+        # 4. Calcular posiciones para las líneas divisorias de meses y las marcas del eje X (solo días 1 y 15) usando la secuencia unificada
+        tickvals = []
+        ticktext = []
+        meses_cambio_indices = []
+        meses_procesados_lineas = set()
+
+        for (mes_num, mes), grupo in dias_unicos.groupby(["Mes_Num", "Mes"], sort=False):
+            primer_indice = grupo["Secuencia_X"].min()  # <--- Corregido (primer_indice sin s)
+            
+            if mes not in meses_procesados_lineas:
+                meses_cambio_indices.append(primer_indice)
+                meses_procesados_lineas.add(mes)
+
+            for _, row in grupo.iterrows():
+                dia = row["Día"]
+                if dia in [1, 15]:
+                    etiqueta = f"{row['Mes']} {dia}"
+                    if row["Secuencia_X"] not in tickvals:
+                        tickvals.append(row["Secuencia_X"])
+                        ticktext.append(etiqueta)
+
+        # 5. Configuración del diseño
+        fig_anual.update_layout(
+            plot_bgcolor="#f4f4f4",
+            paper_bgcolor="#f4f4f4",
+            font_color="#222",
+            height=500,
+            margin=dict(l=40, r=40, t=60, b=40),
+            showlegend=False,
+            xaxis=dict(
+                tickmode="array",
+                tickvals=tickvals,
+                ticktext=ticktext,
+                tickangle=-45,
+                showgrid=True,
+                gridcolor="rgba(0,0,0,0.08)",
+                zeroline=False
+            ),
+            yaxis=dict(
+                title="kWh",
+                showgrid=True,
+                gridcolor="rgba(0,0,0,0.1)",
+                zeroline=False
+            ),
+            hovermode="x unified"
+        )
+
+        # Añadir líneas verticales divisorias para cada inicio de mes en el grid
+        for idx_mes in meses_cambio_indices:
+            fig_anual.add_vline(
+                x=idx_mes,
+                line_width=1,
+                line_dash="dash",
+                line_color="rgba(0, 0, 0, 0.2)"
+            )
+
+        st.plotly_chart(fig_anual, use_container_width=True)
+        
 
 # =========================================================
 # 2) 🎞 EVOLUCIÓN MENSUAL
@@ -344,7 +458,8 @@ with tab2:
         font_color="#222",
         legend_title_text="Año - Tipo",
         margin=dict(l=40, r=150, t=60, b=40),
-        height=550
+        height=550,
+        yaxis_title="kWh"
     )
 
     st.plotly_chart(fig_anim_mes, use_container_width=True)
@@ -440,7 +555,8 @@ with tab3:
         font_color="#222",
         height=550,
         title="Producción Mensual",
-        hovermode="closest"
+        hovermode="closest",
+        yaxis_title="kWh"
     )
 
     st.plotly_chart(fig_prod, use_container_width=True)
@@ -535,7 +651,8 @@ with tab3:
         font_color="#222",
         height=550,
         title="Consumo Mensual",
-        hovermode="closest"
+        hovermode="closest",
+        yaxis_title="kWh"
     )
 
     st.plotly_chart(fig_con, use_container_width=True)
@@ -601,7 +718,7 @@ with tab4:
                 showlegend=False,
                 hovermode="closest",
                 xaxis=dict(tickmode="array", tickvals=x_numeric, ticktext=x_labels, showgrid=False, zeroline=False),
-                yaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.15)", zeroline=False)
+                yaxis=dict(title="kWh", showgrid=True, gridcolor="rgba(0,0,0,0.15)", zeroline=False)
             )
 
             st.plotly_chart(fig, use_container_width=True, key=f"anual_f1_{t}")
