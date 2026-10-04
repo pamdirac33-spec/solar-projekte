@@ -3,7 +3,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-st.set_page_config(page_title="Dashboard Solar", layout="wide")
+st.set_page_config(
+    page_title="Dashboard Paneles Solares",
+    page_icon="🏠",
+    layout="wide"
+)
 
 # ---------------------------------------------------------
 # ESTILOS CSS PARA REDUCIR EL TAMAÑO DE LOS KPIS
@@ -234,8 +238,11 @@ autoc_pct = (pv_used/pro*100) if pro > 0 else 0
 dep_pct = (from_netz/con*100) if con > 0 else 0
 exc_pct = (to_netz/pro*100) if pro > 0 else 0
 
+# KPIs adicionales recomendados: Grado de Autosuficiencia (Self-Sufficiency)
+self_suff_pct = (pv_used / con * 100) if con > 0 else 0
+
 # Todos los KPIs en una sola fila usando 5 columnas
-kpi_cols = st.columns(5)
+kpi_cols = st.columns(6)
 with kpi_cols[0]:
     st.metric("Producción Total", f"{pro:.2f} kWh")
 with kpi_cols[1]:
@@ -246,7 +253,9 @@ with kpi_cols[3]:
     st.metric("Dependencia Red", f"{from_netz:.1f} kWh / {dep_pct:.1f}%")
 with kpi_cols[4]:
     st.metric("Excedente", f"{to_netz:.1f} kWh / {exc_pct:.1f}%")
-
+with kpi_cols[5]:
+    st.metric("Autosuficiencia", f"{self_suff_pct:.1f}%")
+    
 st.markdown("---")
 
 # ---------------------------------------------------------
@@ -383,6 +392,7 @@ with tab1:
             margin=dict(l=40, r=40, t=60, b=40),
             showlegend=False,
             xaxis=dict(
+                title="Fecha",
                 tickmode="array",
                 tickvals=tickvals,
                 ticktext=ticktext,
@@ -410,7 +420,50 @@ with tab1:
             )
 
         st.plotly_chart(fig_anual, use_container_width=True)
+
+        # ---------------------------------------------------------
+        # TABLA ADICIONAL DE MÁXIMOS Y MÍNIMOS POR TIPO (AÑO MOSTRADO)
+        # ---------------------------------------------------------
+        st.markdown("#### 📋 Resumen Anual: Máximos y Mínimos por Tipo")
         
+        # Filtramos datos para el año/s seleccionado/s en la gráfica anterior
+        df_tabla_resumen = df_anual_completo[df_anual_completo["Año"].isin(años_sel)]
+
+        if not df_tabla_resumen.empty:
+            registros_resumen = []
+            
+            # Agrupamos por Tipo (Produced, Consumed, etc.)
+            for tipo_val, grupo_tipo in df_tabla_resumen.groupby("Tipo"):
+                if grupo_tipo.empty:
+                    continue
+                
+                # Fila de Valor Máximo
+                idx_max = grupo_tipo["Valor"].idxmax()
+                row_max = grupo_tipo.loc[idx_max]
+                date_max_str = f"{row_max['Mes']} {int(row_max['Día'])}, {int(row_max['Año'])}"
+                
+                # Fila de Valor Mínimo
+                idx_min = grupo_tipo["Valor"].idxmin()
+                row_min = grupo_tipo.loc[idx_min]
+                date_min_str = f"{row_min['Mes']} {int(row_min['Día'])}, {int(row_min['Año'])}"
+                
+                registros_resumen.append({
+                    "Type": f"{tipo_val} (Max)",
+                    "Max": f"{row_max['Valor']:.2f} kWh",
+                    "Min": "-",
+                    "Date": date_max_str
+                })
+                registros_resumen.append({
+                    "Type": f"{tipo_val} (Min)",
+                    "Max": "-",
+                    "Min": f"{row_min['Valor']:.2f} kWh",
+                    "Date": date_min_str
+                })
+
+            df_resumen_final = pd.DataFrame(registros_resumen)
+            st.dataframe(df_resumen_final, use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay suficientes datos para generar la tabla resumen.")
 
 # =========================================================
 # 2) 🎞 EVOLUCIÓN MENSUAL
