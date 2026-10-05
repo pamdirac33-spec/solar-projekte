@@ -331,7 +331,7 @@ with tab1:
     if df_filtrado.empty:
         st.warning("Hefe, no hay datos para mostrar!")
         st.stop()
-        
+    
     fig = px.line(
         df_filtrado,
         x="Día",
@@ -901,9 +901,10 @@ with tab3:
 # =========================================================
 with tab4:
     import requests
+    from datetime import date
 
     st.markdown("---")
-    st.subheader("🌤️ Clima e Histórico en Ingolstadt (Panel Meteorológico)")
+    st.subheader("🌤️ Panel Meteorológico [Ingolstadt]")
     st.markdown("*Datos públicos de tiempo vs producción y consumo total para los meses seleccionados en secuencia continua.*")
 
     # Coordenadas geográficas de Ingolstadt, Alemania
@@ -943,7 +944,12 @@ with tab4:
             min_anio = min(años_sel)
             max_anio = max(años_sel)
             f_inicio = f"{min_anio}-01-01"
-            f_fin = f"{max_anio}-12-31"
+            # Si el año seleccionado es el actual (2026) o futuro, limitamos la fecha fin a hoy
+            hoy_str = date.today().strftime("%Y-%m-%d")
+            if max_anio >= date.today().year:
+                f_fin = min(f"{max_anio}-12-31", hoy_str)
+            else:
+                f_fin = f"{max_anio}-12-31"
             
             @st.cache_data
             def cargar_clima_ingolstadt(lat, lon, start_d, end_d):
@@ -1042,30 +1048,32 @@ with tab4:
                 # customdata unificado: [Año, Mes, Día, Produced, Consumed, Lluvia, Nieve, Temp_Max, Temp_Min]
                 custom_data_arr = df_pivot[["Año", "Mes", "Día", "Produced", "Consumed", "Lluvia", "Nieve", "Temp_Max", "Temp_Min"]].values.tolist()
 
-                # 1. Curva de Produced (con el hover activo y completo)
+                # 1. Curva de Produced (amarillo oscuro)
                 fig_clima.add_trace(go.Scatter(
                     x=df_pivot["Secuencia_X"],
                     y=df_pivot["Produced"],
                     mode="lines+markers",
                     name="Produced Total",
-                    line=dict(width=2),
+                    line=dict(width=2, color="#B8860B"),
+                    marker=dict(color="#B8860B", size=6),
                     customdata=custom_data_arr,
                     hovertemplate=(
                         "<b>%{customdata[0]} - %{customdata[1]} (Día %{customdata[2]})</b><br>"
-                        "🟢 Produced: %{customdata[3]:.2f} kWh<br>"
-                        "🔴 Consumed: %{customdata[4]:.2f} kWh<br>"
+                        "🟡 Produced: %{customdata[3]:.2f} kWh<br>"
+                        "🔵 Consumed: %{customdata[4]:.2f} kWh<br>"
                         "🌧️ Lluvia: %{customdata[5]:.1f} mm | ❄️ Nieve: %{customdata[6]:.1f} cm<br>"
                         "🌡️ Máx: %{customdata[7]:.1f} °C | Mín: %{customdata[8]:.1f} °C<extra></extra>"
                     )
                 ))
 
-                # 2. Curva de Consumed (dibujada en la gráfica pero SIN hover duplicado)
+                # 2. Curva de Consumed (azul oscuro, SIN hover duplicado ya que la info va en Produced)
                 fig_clima.add_trace(go.Scatter(
                     x=df_pivot["Secuencia_X"],
                     y=df_pivot["Consumed"],
                     mode="lines+markers",
                     name="Consumed Total",
-                    line=dict(width=2),
+                    line=dict(width=2, color="#1E3A8A"), # Azul oscuro
+                    marker=dict(color="#1E3A8A", size=6), # Círculos en azul oscuro
                     hoverinfo="skip"
                 ))
 
@@ -1181,7 +1189,7 @@ with tab4:
     else:
         st.warning("Selecciona al menos un año y un mes para consultar el panel del clima.")
 
-        
+
 # =========================================================
 # 5) 📄 TABLA FINAL
 # =========================================================
