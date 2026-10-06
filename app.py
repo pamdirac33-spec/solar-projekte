@@ -248,9 +248,11 @@ with st.sidebar:
     # UPLOADER ABAJO DEL TODO EN LA BARRA LATERAL
     # ---------------------------------------------------------
     st.markdown("---")
+    st.markdown(f"Sube tu archivo (*`{ruta_defecto}`)*")
     archivo_subido = st.file_uploader(
-        f"Sube tu .xlsx (default: {ruta_defecto})",
-        type=["xlsx"]
+        "Selecciona el archivo Excel",
+        type=["xlsx"],
+        label_visibility="collapsed" # Opcional: oculta la etiqueta repetitiva si ya usas el markdown arriba
     )
 
 # ---------------------------------------------------------
@@ -326,12 +328,20 @@ with tab1:
         (df_long["Tipo"].isin(tipos_sel)) &
         (df_long["Día"] >= rango_dias[0]) &
         (df_long["Día"] <= rango_dias[1])
-    ]
+    ].copy()
 
     if df_filtrado.empty:
         st.warning("Hefe, no hay datos para mostrar!")
         st.stop()
     
+    # Creamos la fecha formateada para el hover
+    df_filtrado["Mes_Num_Temp"] = df_filtrado["Mes"].map(lambda m: orden_meses.index(m) + 1 if m in orden_meses else 1)
+    df_filtrado["Fecha_Filtro"] = (
+        df_filtrado["Año"].astype(str) + "." + 
+        df_filtrado["Mes_Num_Temp"].astype(str).str.zfill(2) + "." + 
+        df_filtrado["Día"].astype(str).str.zfill(2)
+    )
+
     fig = px.line(
         df_filtrado,
         x="Día",
@@ -341,12 +351,11 @@ with tab1:
         markers=True,
         color_discrete_sequence=px.colors.qualitative.Set1,
         render_mode="svg",
-        custom_data=["Año", "Mes", "Tipo"]  # 1. Pasamos los tres campos que necesitamos
+        custom_data=["Fecha_Filtro", "Tipo"]  # Pasamos la fecha unificada y el tipo
     )
 
-    # 2. Diseñamos el hovertemplate combinando los customdata y el valor numérico
     fig.update_traces(
-        hovertemplate="<b>%{customdata[0]} - %{customdata[1]}</b><br><b>%{customdata[2]}:</b> %{y:.2f} kWh<extra></extra>"
+        hovertemplate="<b>%{customdata[0]}</b><br><b>%{customdata[1]}:</b> %{y:.2f} kWh<extra></extra>"
     )
 
     fig.update_layout(
@@ -399,6 +408,13 @@ with tab1:
         # Mapeamos esa secuencia al DataFrame principal
         df_anual_completo = df_anual_completo.merge(dias_unicos, on=["Mes_Num", "Mes", "Día"], how="left")
 
+        # Creamos la fecha formateada para la gráfica anual
+        df_anual_completo["Fecha_Anual"] = (
+            df_anual_completo["Año"].astype(str) + "." + 
+            df_anual_completo["Mes_Num"].astype(str).str.zfill(2) + "." + 
+            df_anual_completo["Día"].astype(str).str.zfill(2)
+        )
+
         fig_anual = px.line(
             df_anual_completo,
             x="Secuencia_X",
@@ -408,11 +424,11 @@ with tab1:
             markers=False,
             color_discrete_sequence=px.colors.qualitative.Set1,
             render_mode="svg",
-            custom_data=["Año", "Mes", "Tipo", "Día"]
+            custom_data=["Fecha_Anual", "Tipo"]  # Usamos la fecha formateada en custom_data
         )
 
         fig_anual.update_traces(
-            hovertemplate="<b>%{customdata[0]} - %{customdata[1]} (Día %{customdata[3]})</b><br><b>%{customdata[2]}:</b> %{y:.2f} kWh<extra></extra>"
+            hovertemplate="<b>%{customdata[0]}</b><br><b>%{customdata[1]}:</b> %{y:.2f} kWh<extra></extra>"
         )
 
         # 4. Calcular posiciones para las líneas divisorias de meses y las marcas del eje X (solo días 1 y 15) usando la secuencia unificada
@@ -541,9 +557,19 @@ with tab2:
     df_anim = df_filtrado.copy()
     df_anim["Serie_Anim"] = df_anim["Año"].astype(str) + " - " + df_anim["Tipo"]
 
-    # Nos aseguramos de que el mes respete la categoría ordenada y ordenamos filas
+    # 1. Definimos primero el número de mes que faltaba
+    df_anim["Mes_Num"] = df_anim["Mes"].map(lambda m: orden_meses.index(m) + 1 if m in orden_meses else 1)
+
+    # 2. Nos aseguramos de que el mes respete la categoría ordenada y ordenamos filas
     df_anim["Mes"] = pd.Categorical(df_anim["Mes"], categories=orden_meses, ordered=True)
     df_anim = df_anim.sort_values(["Mes", "Día"])
+
+    # 3. Construimos la fecha completa con formato YYYY.MM.DD
+    df_anim["Fecha_Hover"] = (
+        df_anim["Año"].astype(str) + "." + 
+        df_anim["Mes_Num"].astype(str).str.zfill(2) + "." + 
+        df_anim["Día"].astype(str).str.zfill(2)
+    )
 
     fig_anim_mes = px.line(
         df_anim,
@@ -555,16 +581,16 @@ with tab2:
         range_y=[0, df_anim["Valor"].max() * 1.1],
         color_discrete_sequence=px.colors.qualitative.Set1,
         render_mode="svg",
-        custom_data=["Año", "Mes", "Tipo"]
+        custom_data=["Fecha_Hover", "Tipo"]  # [0] -> Fecha YYYY.MM.DD limpia arriba, [1] -> Tipo
     )
     
-    # 1. Definimos la plantilla de hover exacta que deseas
-    mi_hovertemplate = "<b>%{customdata[0]} - %{customdata[1]}</b><br><b>%{customdata[2]}:</b> %{y:.2f} kWh<extra></extra>"
-
-    # 2. Aplicamos el hovertemplate al gráfico principal
+    # 4. FORZAMOS la fecha en la cabecera del hover unificado usando customdata[0]
+    mi_hovertemplate = "<b>%{customdata[0]}</b><br><b>%{customdata[1]}:</b> %{y:.2f} kWh<extra></extra>"
+    
+    # 5. Aplicamos el hovertemplate al gráfico principal
     fig_anim_mes.update_traces(hovertemplate=mi_hovertemplate)
 
-    # 3. Forzamos el orden cronológico de los frames y aplicamos el hovertemplate
+    # 6. Forzamos el orden cronológico de los frames y aplicamos el hovertemplate
     if fig_anim_mes.frames:
         fig_anim_mes.frames = sorted(
             fig_anim_mes.frames, 
@@ -603,6 +629,8 @@ with tab2:
         fill_value=0
     ).reset_index()
 
+    # Calculamos el número de mes para armar el YYYY.MM
+    dfp["Mes_Num"] = dfp["Mes"].map(lambda m: orden_meses.index(m) + 1 if m in orden_meses else 1)
     dfp["Mes"] = pd.Categorical(dfp["Mes"], categories=orden_meses, ordered=True)
     dfp = dfp.sort_values(["Mes", "Año"])
 
@@ -621,7 +649,8 @@ with tab2:
         c_pv = colores_pvused[idx % len(colores_pvused)]
         c_net = colores_tonetz[idx % len(colores_tonetz)]
 
-        custom_data_a = [[año, m] for m in df_a["Mes"]]
+        # Generamos la fecha limpia YYYY.MM para cada barra de este año
+        custom_data_a = [[str(año) + "." + str(row["Mes_Num"]).zfill(2)] for _, row in df_a.iterrows()]
 
         # --- PRODUCED ---
         fig_prod.add_bar(
@@ -631,7 +660,7 @@ with tab2:
             marker_color=c_prod,
             offsetgroup=f"{año}_prod",
             customdata=custom_data_a,
-            hovertemplate=f"<b>%{{customdata[0]}} - %{{customdata[1]}}</b><br><span style='color:{c_prod}'><b>Produced:</b> %{{y:,.2f}} kWh</span><extra></extra>"
+            hovertemplate="<b>%{customdata[0]}</b><br>" + f"<span style='color:{c_prod}'><b>Produced:</b> %{{y:,.2f}} kWh</span><extra></extra>"
         )
 
         # --- PV USED ---
@@ -642,7 +671,7 @@ with tab2:
             marker_color=c_pv,
             offsetgroup=f"{año}_stack",
             customdata=custom_data_a,
-            hovertemplate=f"<b>%{{customdata[0]}} - %{{customdata[1]}}</b><br><span style='color:{c_pv}'><b>PV Used:</b> %{{y:,.2f}} kWh</span><extra></extra>"
+            hovertemplate="<b>%{customdata[0]}</b><br>" + f"<span style='color:{c_pv}'><b>PV Used:</b> %{{y:,.2f}} kWh</span><extra></extra>"
         )
 
         # --- TO NETZ ---
@@ -653,7 +682,7 @@ with tab2:
             marker_color=c_net,
             offsetgroup=f"{año}_stack",
             customdata=custom_data_a,
-            hovertemplate=f"<b>%{{customdata[0]}} - %{{customdata[1]}}</b><br><span style='color:{c_net}'><b>To Netz:</b> %{{y:,.2f}} kWh</span><extra></extra>"
+            hovertemplate="<b>%{customdata[0]}</b><br>" + f"<span style='color:{c_net}'><b>To Netz:</b> %{{y:,.2f}} kWh</span><extra></extra>"
         )
 
         # Línea discontinua por año
@@ -677,7 +706,6 @@ with tab2:
         paper_bgcolor="#f4f4f4",
         font_color="#222",
         height=550,
-        title="Producción Mensual",
         hovermode="closest",
         yaxis_title="kWh"
     )
@@ -699,6 +727,7 @@ with tab2:
         fill_value=0
     ).reset_index()
 
+    dfc["Mes_Num"] = dfc["Mes"].map(lambda m: orden_meses.index(m) + 1 if m in orden_meses else 1)
     dfc["Mes"] = pd.Categorical(dfc["Mes"], categories=orden_meses, ordered=True)
     dfc = dfc.sort_values(["Mes", "Año"])
 
@@ -717,7 +746,8 @@ with tab2:
         c_pv = colores_pvused[idx % len(colores_pvused)]
         c_net_from = colores_fromnetz[idx % len(colores_fromnetz)]
 
-        custom_data_a = [[año, m] for m in df_a["Mes"]]
+        # Generamos la fecha limpia YYYY.MM para cada barra de consumo de este año
+        custom_data_a = [[str(año) + "." + str(row["Mes_Num"]).zfill(2)] for _, row in df_a.iterrows()]
 
         # --- CONSUMED ---
         fig_con.add_bar(
@@ -727,7 +757,7 @@ with tab2:
             marker_color=c_con,
             offsetgroup=f"{año}_cons",
             customdata=custom_data_a,
-            hovertemplate=f"<b>%{{customdata[0]}} - %{{customdata[1]}}</b><br><span style='color:{c_con}'><b>Consumed:</b> %{{y:,.2f}} kWh</span><extra></extra>"
+            hovertemplate="<b>%{customdata[0]}</b><br>" + f"<span style='color:{c_con}'><b>Consumed:</b> %{{y:,.2f}} kWh</span><extra></extra>"
         )
 
         # --- PV USED ---
@@ -738,7 +768,7 @@ with tab2:
             marker_color=c_pv,
             offsetgroup=f"{año}_stack",
             customdata=custom_data_a,
-            hovertemplate=f"<b>%{{customdata[0]}} - %{{customdata[1]}}</b><br><span style='color:{c_pv}'><b>PV Used:</b> %{{y:,.2f}} kWh</span><extra></extra>"
+            hovertemplate="<b>%{customdata[0]}</b><br>" + f"<span style='color:{c_pv}'><b>PV Used:</b> %{{y:,.2f}} kWh</span><extra></extra>"
         )
 
         # --- FROM NETZ ---
@@ -749,7 +779,7 @@ with tab2:
             marker_color=c_net_from,
             offsetgroup=f"{año}_stack",
             customdata=custom_data_a,
-            hovertemplate=f"<b>%{{customdata[0]}} - %{{customdata[1]}}</b><br><span style='color:{c_net_from}'><b>From Netz:</b> %{{y:,.2f}} kWh</span><extra></extra>"
+            hovertemplate="<b>%{customdata[0]}</b><br>" + f"<span style='color:{c_net_from}'><b>From Netz:</b> %{{y:,.2f}} kWh</span><extra></extra>"
         )
 
         # Línea discontinua por año
@@ -773,7 +803,6 @@ with tab2:
         paper_bgcolor="#f4f4f4",
         font_color="#222",
         height=550,
-        title="Consumo Mensual",
         hovermode="closest",
         yaxis_title="kWh"
     )
@@ -904,12 +933,41 @@ with tab4:
     from datetime import date
 
     st.markdown("---")
-    st.subheader("🌤️ Panel Meteorológico [Ingolstadt]")
-    st.markdown("*Datos públicos de tiempo vs producción y consumo total para los meses seleccionados en secuencia continua.*")
+    st.subheader("🌤️ Panel Meteorológico")
+    st.markdown("*Datos públicos de tiempo vs producción y consumo total para los meses seleccionados.*")
 
-    # Coordenadas geográficas de Ingolstadt, Alemania
-    LAT_INGOLSTADT = 48.7657
-    LON_INGOLSTADT = 11.4231
+    # ÚNICA CAJA DE TEXTO LIBRE: Precargada por defecto con "Ingolstadt"
+    busqueda_usuario = st.text_input(
+        "🔍 Escribe cualquier ciudad o código postal del mundo (ej. Ingolstadt, 47004):",
+        value="Ingolstadt"
+    )
+
+    # Función para buscar coordenadas globales en tiempo real mediante la API de Open-Meteo
+    @st.cache_data
+    def buscar_coordenadas(nombre_lugar):
+        if not nombre_lugar.strip():
+            return 48.7657, 11.4231, "Ingolstadt" # Fallback por defecto
+        
+        url_geo = f"https://geocoding-api.open-meteo.com/v1/search?name={nombre_lugar}&count=1&language=es&format=json"
+        try:
+            res = requests.get(url_geo)
+            data = res.json()
+            if "results" in data and len(data["results"]) > 0:
+                loc = data["results"][0]
+                lat = loc["latitude"]
+                lon = loc["longitude"]
+                nombre = loc.get("name", nombre_lugar)
+                pais = loc.get("country", "")
+                nombre_completo = f"{nombre} ({pais})" if pais else nombre
+                return lat, lon, nombre_completo
+        except Exception:
+            pass
+        
+        # Si falla la API o no encuentra nada, mantenemos Ingolstadt por defecto de seguridad
+        return 48.7657, 11.4231, "Ingolstadt"
+
+    # Obtenemos las coordenadas reales de lo que escriba el usuario
+    LAT_LOC, LON_LOC, nombre_loc = buscar_coordenadas(busqueda_usuario)
 
     def obtener_info_clima(code):
         if code == 0:
@@ -921,7 +979,7 @@ with tab4:
         elif code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
             return "🌧️ Lluvioso"
         elif code in [71, 73, 75, 85, 86]:
-            return "❄️ Nevado"
+            return "❄️ Nieve"
         else:
             return "☁️ Nublado"
 
@@ -944,7 +1002,6 @@ with tab4:
             min_anio = min(años_sel)
             max_anio = max(años_sel)
             f_inicio = f"{min_anio}-01-01"
-            # Si el año seleccionado es el actual (2026) o futuro, limitamos la fecha fin a hoy
             hoy_str = date.today().strftime("%Y-%m-%d")
             if max_anio >= date.today().year:
                 f_fin = min(f"{max_anio}-12-31", hoy_str)
@@ -952,7 +1009,7 @@ with tab4:
                 f_fin = f"{max_anio}-12-31"
             
             @st.cache_data
-            def cargar_clima_ingolstadt(lat, lon, start_d, end_d):
+            def cargar_clima_localidad(lat, lon, start_d, end_d):
                 url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date={start_d}&end_date={end_d}&daily=weathercode,precipitation_sum,snowfall_sum,temperature_2m_max,temperature_2m_min,sunshine_duration,windspeed_10m_max&timezone=Europe/Berlin"
                 try:
                     response = requests.get(url)
@@ -960,14 +1017,14 @@ with tab4:
                     if "daily" in data:
                         df_w = pd.DataFrame(data["daily"])
                         df_w["time"] = pd.to_datetime(df_w["time"])
-                        df_w["Fecha"] = df_w["time"].dt.strftime("%Y-%m-%d")
+                        df_w["Fecha"] = df_w["time"].dt.strftime("%Y.%m.%d")
                         df_w["Año"] = df_w["time"].dt.year
-                        df_w["Mes_num"] = df_w["time"].dt.month
+                        df_w["Mes_Num"] = df_w["time"].dt.month  # <- Lo creamos directamente aquí de forma numérica
                         df_w["Día"] = df_w["time"].dt.day
                         
                         meses_es = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Avr", 5: "Mai", 6: "Jun",
                                     7: "Jul", 8: "Aug", 9: "Sep", 10: "Okt", 11: "Nov", 12: "Dez"}
-                        df_w["Mes"] = df_w["Mes_num"].map(meses_es)
+                        df_w["Mes"] = df_w["Mes_Num"].map(meses_es)
                         
                         df_w["Clima_Texto"] = [obtener_info_clima(code) for code in df_w["weathercode"]]
                         df_w["Icono"] = [obtener_icono_corto(code) for code in df_w["weathercode"]]
@@ -982,17 +1039,16 @@ with tab4:
                             "temperature_2m_min": "Temp_Min",
                             "windspeed_10m_max": "Viento"
                         })
-                        return df_w[["Fecha", "Año", "Mes", "Día", "Clima_Texto", "Icono", "Temp_Max", "Temp_Min", "Horas_Sol", "Horas_Nubes", "Viento", "Lluvia", "Nieve"]]
+                        return df_w[["Fecha", "Año", "Mes_Num", "Mes", "Día", "Clima_Texto", "Icono", "Temp_Max", "Temp_Min", "Horas_Sol", "Horas_Nubes", "Viento", "Lluvia", "Nieve"]]
                 except Exception:
                     pass
                 return pd.DataFrame()
 
-            df_weather = cargar_clima_ingolstadt(LAT_INGOLSTADT, LON_INGOLSTADT, f_inicio, f_fin)
+            df_weather = cargar_clima_localidad(LAT_LOC, LON_LOC, f_inicio, f_fin)
 
-            # Verificación defensiva contra caché antigua de Streamlit
             if not df_weather.empty:
                 for col, val in [("Fecha", ""), ("Clima_Texto", "☁️ Nublado"), ("Temp_Max", 0), ("Temp_Min", 0), 
-                                 ("Horas_Sol", 0), ("Horas_Nubes", 0), ("Viento", 0), ("Lluvia", 0), ("Nieve", 0), ("Icono", "☁️")]:
+                                 ("Horas_Sol", 0), ("Horas_Nubes", 0), ("Viento", 0), ("Lluvia", 0), ("Nieve", 0), ("Icono", "☁️️"), ("Mes_Num", 1)]:
                     if col not in df_weather.columns:
                         df_weather[col] = val
 
@@ -1002,8 +1058,18 @@ with tab4:
                     (df_long["Tipo"].isin(["Produced", "Consumed"]))
                 ].copy()
 
-                # Cruzamos los datos de energía con los del clima por Año, Mes y Día
-                df_panel_final = pd.merge(df_energia_total, df_weather, on=["Año", "Mes", "Día"], how="left")
+                # Aseguramos que df_energia_total tenga Mes_Num si no lo trae
+                if "Mes_Num" not in df_energia_total.columns and "Mes" in df_energia_total.columns:
+                    # Intentamos mapear o extraer de otra forma si es necesario, o cruzar directamente por Año, Mes, Día
+                    pass
+
+                df_panel_final = pd.merge(df_energia_total, df_weather, on=["Año", "Mes", "Día"], how="left", suffixes=('', '_weather'))
+                
+                # Limpiamos posibles columnas duplicadas de Mes_Num si se solaparan
+                if "Mes_Num_weather" in df_panel_final.columns:
+                    df_panel_final["Mes_Num"] = df_panel_final["Mes_Num_weather"].fillna(df_panel_final.get("Mes_Num", 1))
+                    df_panel_final.drop(columns=[c for c in ["Mes_Num_weather", "Mes_Num_energia"] if c in df_panel_final.columns], inplace=True, errors='ignore')
+
                 df_panel_final["Lluvia"] = df_panel_final["Lluvia"].fillna(0)
                 df_panel_final["Nieve"] = df_panel_final["Nieve"].fillna(0)
                 df_panel_final["Temp_Max"] = df_panel_final["Temp_Max"].fillna(0)
@@ -1011,27 +1077,27 @@ with tab4:
                 df_panel_final["Horas_Sol"] = df_panel_final["Horas_Sol"].fillna(0)
                 df_panel_final["Horas_Nubes"] = df_panel_final["Horas_Nubes"].fillna(0)
                 df_panel_final["Viento"] = df_panel_final["Viento"].fillna(0)
-                df_panel_final["Clima_Texto"] = df_panel_final["Clima_Texto"].fillna("☁️ Nublado")
+                df_panel_final["Clima_Texto"] = df_panel_final["Clima_Texto"].fillna("☁️️ Nublado")
                 df_panel_final["Icono"] = df_panel_final["Icono"].fillna("☁️")
                 
                 if "Fecha" in df_panel_final.columns:
                     df_panel_final["Fecha"] = df_panel_final["Fecha"].fillna(
-                        df_panel_final["Año"].astype(str) + "-" + df_panel_final["Mes"] + "-" + df_panel_final["Día"].astype(str)
+                        df_panel_final["Año"].astype(str) + "." + 
+                        df_panel_final["Mes_Num"].astype(str).str.zfill(2) + "." + 
+                        df_panel_final["Día"].astype(str).str.zfill(2)
                     )
-
-                # Orden cronológico estricto
-                df_panel_final["Mes_Num"] = df_panel_final["Mes"].map(lambda m: orden_meses.index(m) + 1 if m in orden_meses else 99)
+                
                 df_panel_final = df_panel_final.sort_values(["Año", "Mes_Num", "Día"])
 
-                # Secuencia continua en el eje X
                 dias_unicos_clima = df_panel_final[["Fecha", "Año", "Mes_Num", "Mes", "Día", "Clima_Texto", "Icono", "Temp_Max", "Temp_Min", "Horas_Sol", "Horas_Nubes", "Viento", "Lluvia", "Nieve"]].drop_duplicates().sort_values(["Año", "Mes_Num", "Día"]).reset_index(drop=True)
                 dias_unicos_clima["Secuencia_X"] = dias_unicos_clima.index
 
-                df_panel_final = df_panel_final.merge(dias_unicos_clima[["Año", "Mes_Num", "Mes", "Día", "Secuencia_X"]], on=["Año", "Mes_Num", "Mes", "Día"], how="left")
+                df_panel_final = df_panel_final.merge(dias_unicos_clima[["Año", "Mes_Num", "Mes", "Día", "Secuencia_X"]], on=["Año", "Mes_Num", "Mes", "Día"], how="left", suffixes=('', '_dup'))
+                df_panel_final = df_panel_final.loc[:, ~df_panel_final.columns.str.endswith('_dup')]
 
+                
                 fig_clima = go.Figure()
 
-                # Pivoteamos para alinear Produced y Consumed en la misma fila por día
                 df_pivot = df_panel_final.pivot_table(
                     index=["Secuencia_X", "Fecha", "Año", "Mes", "Día", "Clima_Texto", "Lluvia", "Nieve", "Temp_Max", "Temp_Min", "Icono"],
                     columns="Tipo",
@@ -1045,42 +1111,51 @@ with tab4:
                 df_pivot["Produced"] = df_pivot["Produced"].fillna(0)
                 df_pivot["Consumed"] = df_pivot["Consumed"].fillna(0)
 
-                # customdata unificado: [Año, Mes, Día, Produced, Consumed, Lluvia, Nieve, Temp_Max, Temp_Min]
-                custom_data_arr = df_pivot[["Año", "Mes", "Día", "Produced", "Consumed", "Lluvia", "Nieve", "Temp_Max", "Temp_Min"]].values.tolist()
+                customdata_arr = df_pivot[["Fecha", "Produced", "Consumed", "Lluvia", "Nieve", "Temp_Max", "Temp_Min"]].values.tolist()
 
-                # 1. Curva de Produced (amarillo oscuro)
                 fig_clima.add_trace(go.Scatter(
                     x=df_pivot["Secuencia_X"],
                     y=df_pivot["Produced"],
                     mode="lines+markers",
-                    name="Produced Total",
+                    name="Produced",
                     line=dict(width=2, color="#B8860B"),
                     marker=dict(color="#B8860B", size=6),
-                    customdata=custom_data_arr,
+                    customdata=customdata_arr,
                     hovertemplate=(
-                        "<b>%{customdata[0]} - %{customdata[1]} (Día %{customdata[2]})</b><br>"
-                        "🟡 Produced: %{customdata[3]:.2f} kWh<br>"
-                        "🔵 Consumed: %{customdata[4]:.2f} kWh<br>"
-                        "🌧️ Lluvia: %{customdata[5]:.1f} mm | ❄️ Nieve: %{customdata[6]:.1f} cm<br>"
-                        "🌡️ Máx: %{customdata[7]:.1f} °C | Mín: %{customdata[8]:.1f} °C<extra></extra>"
+                        "<b>%{customdata[0]}</b><br>"
+                        "🟡 Produced: %{customdata[1]:.2f} kWh<br>"
+                        "🔵 Consumed: %{customdata[2]:.2f} kWh<br>"
+                        "🌧️ Lluvia: %{customdata[3]:.1f} mm | ❄️ Nieve: %{customdata[4]:.1f} cm<br>"
+                        "🌡️️ Máx: %{customdata[5]:.1f} °C | Mín: %{customdata[6]:.1f} °C<extra></extra>"
                     )
                 ))
 
-                # 2. Curva de Consumed (azul oscuro, SIN hover duplicado ya que la info va en Produced)
                 fig_clima.add_trace(go.Scatter(
                     x=df_pivot["Secuencia_X"],
                     y=df_pivot["Consumed"],
                     mode="lines+markers",
-                    name="Consumed Total",
-                    line=dict(width=2, color="#1E3A8A"), # Azul oscuro
-                    marker=dict(color="#1E3A8A", size=6), # Círculos en azul oscuro
-                    hoverinfo="skip"
+                    name="Consumed",
+                    line=dict(width=2, color="#3B82F6"),
+                    marker=dict(color="#3B82F6", size=6),
+                    customdata=customdata_arr,
+                    hovertemplate=(
+                        "<b>%{customdata[0]}</b><br>"
+                        "🟡 Produced: %{customdata[1]:.2f} kWh<br>"
+                        "🔵 Consumed: %{customdata[2]:.2f} kWh<br>"
+                        "🌧️ Lluvia: %{customdata[3]:.1f} mm | ❄️ Nieve: %{customdata[4]:.1f} cm<br>"
+                        "🌡️ Máx: %{customdata[5]:.1f} °C | Mín: %{customdata[6]:.1f} °C<extra></extra>"
+                    )
                 ))
 
-                # --- ICONOS DEL CLIMA ARRIBA EN LA GRÁFICA ---
-                paso_iconos = 1 if len(meses_sel) <= 3 else 3
+                # Lógica personalizada para el paso de los iconos según los meses seleccionados
+                if len(meses_sel) <= 2:
+                    paso_iconos = 1
+                elif len(meses_sel) > 5:
+                    paso_iconos = 5
+                else:
+                    paso_iconos = 3  # Valor intermedio para cuando selecciones 3, 4 o 5 meses
+                    
                 df_iconos_filtrados = dias_unicos_clima.iloc[::paso_iconos].copy()
-                
                 max_y_val = df_panel_final["Valor"].max() if not df_panel_final["Valor"].empty else 100
 
                 fig_clima.add_trace(go.Scatter(
@@ -1093,7 +1168,6 @@ with tab4:
                     hoverinfo="skip"
                 ))
 
-                # Generamos las marcas (ticks) inteligentes para el eje X
                 tickvals = []
                 ticktext = []
                 meses_cambio_indices = []
@@ -1117,7 +1191,7 @@ with tab4:
                     paper_bgcolor="#f4f4f4",
                     font_color="#222",
                     height=580,
-                    title="Producción y Consumo Total con Histórico Meteorológico (Ingolstadt)",
+                    title=f"    Producción y Consumo Total vs Meteo ({nombre_loc})",
                     xaxis=dict(
                         title="Fecha",
                         tickmode="array",
@@ -1143,13 +1217,13 @@ with tab4:
                     )
 
                 st.plotly_chart(fig_clima, use_container_width=True)
-
+                
                 # =========================================================
                 # TABLA DETALLADA DE CLIMA Y ENERGÍA
                 # =========================================================
                 st.markdown("---")
                 st.subheader("📋 Detalle Meteorológico y Energético Diario")
-                
+
                 # Fusionamos los datos climáticos únicos con el pivote de energía para incluir Produced y Consumed
                 df_tabla_final = pd.merge(
                     dias_unicos_clima[["Fecha", "Secuencia_X", "Clima_Texto", "Temp_Max", "Temp_Min", "Horas_Sol", "Horas_Nubes", "Viento", "Lluvia", "Nieve"]],
@@ -1165,22 +1239,49 @@ with tab4:
                 ]].copy()
 
                 df_tabla_final.columns = [
-                    "fecha", "kWh Producidos", "kWh Consumidos", "Clima", "Temp Max", "Temp Min", 
-                    "Horas de sol", "Horas de Nubes", "Viento", "Lluvia", "Nieve"
+                    "Fecha", "Producción", "Consumo", "Nubosidad", "Temp Max", "Temp Min", 
+                    "Horas de sol", "Horas Nublado", "Viento", "Lluvia", "Nieve"
                 ]
 
-                # Formateo visual con unidades
-                df_tabla_final["kWh Producidos"] = df_tabla_final["kWh Producidos"].fillna(0).round(2).astype(str) + " kWh"
-                df_tabla_final["kWh Consumidos"] = df_tabla_final["kWh Consumidos"].fillna(0).round(2).astype(str) + " kWh"
-                df_tabla_final["Temp Max"] = df_tabla_final["Temp Max"].astype(str) + " °C"
-                df_tabla_final["Temp Min"] = df_tabla_final["Temp Min"].astype(str) + " °C"
-                df_tabla_final["Horas de sol"] = df_tabla_final["Horas de sol"].astype(str) + " h"
-                df_tabla_final["Horas de Nubes"] = df_tabla_final["Horas de Nubes"].astype(str) + " h"
-                df_tabla_final["Viento"] = df_tabla_final["Viento"].astype(str) + " km/h"
-                df_tabla_final["Lluvia"] = df_tabla_final["Lluvia"].astype(str) + " mm"
-                df_tabla_final["Nieve"] = df_tabla_final["Nieve"].astype(str) + " cm"
+                # Limpiamos valores nulos y redondeamos usando los NUEVOS nombres de columna
+                df_tabla_final["Producción"] = df_tabla_final["Producción"].fillna(0).round(2)
+                df_tabla_final["Consumo"] = df_tabla_final["Consumo"].fillna(0).round(2)
 
-                st.dataframe(df_tabla_final, use_container_width=True, hide_index=True)
+                # Mostramos la tabla utilizando column_config adaptado a los nuevos nombres
+                st.dataframe(
+                    df_tabla_final,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Producción": st.column_config.NumberColumn(
+                            "Producción", format="%.2f kWh"
+                        ),
+                        "Consumo": st.column_config.NumberColumn(
+                            "Consumo", format="%.2f kWh"
+                        ),
+                        "Temp Max": st.column_config.NumberColumn(
+                            "Temp Max", format="%.1f °C"
+                        ),
+                        "Temp Min": st.column_config.NumberColumn(
+                            "Temp Min", format="%.1f °C"
+                        ),
+                        "Horas de sol": st.column_config.NumberColumn(
+                            "Horas de sol", format="%.1f h"
+                        ),
+                        "Horas Nublado": st.column_config.NumberColumn(
+                            "Horas Nublado", format="%.1f h"
+                        ),
+                        "Viento": st.column_config.NumberColumn(
+                            "Viento", format="%.1f km/h"
+                        ),
+                        "Lluvia": st.column_config.NumberColumn(
+                            "Lluvia", format="%.1f mm"
+                        ),
+                        "Nieve": st.column_config.NumberColumn(
+                            "Nieve", format="%.1f cm"
+                        )
+                    }
+                )
 
             else:
                 st.warning("No se pudieron recuperar los datos de Open-Meteo para el rango seleccionado.")
@@ -1235,5 +1336,33 @@ with tab6:
        * A partir de la cuarta columna, cada cabecera debe representar un **día del mes** (números enteros del `1` al `31`).
        * Las celdas correspondientes deben contener el valor numérico en **kWh** medido para ese día, mes, año y tipo de registro.
 
-    > **Nota importante:** Los días que no existan en meses más cortos (ej. el 30 o 31 de febrero) simplemente se pueden dejar vacíos o sin definir, ya que el script elimina automáticamente los valores nulos (`dropna`).
+    > **Nota:** Los días que no existan en meses más cortos (ej. el 30 o 31 de febrero) simplemente se pueden dejar vacíos o sin definir, ya que el script elimina automáticamente los valores nulos (`dropna`).
+    
+    ---
+
+    ### 🌤️ Información sobre la API de Open-Meteo y Variables Utilizadas
+    La pestaña **"🌤 Paneles y Clima"** se conecta en tiempo de ejecución a la **API Archive de Open-Meteo** para correlacionar la producción y consumo energético con las condiciones meteorológicas reales registradas en **Ingolstadt** (Alemania).
+
+    #### 1. Endpoint y URL de la Petición
+    Se utiliza el servicio histórico de Open-Meteo mediante peticiones HTTP `GET`:
+    ```text
+    [https://archive-api.open-meteo.com/v1/archive?latitude=48.7657&longitude=11.4231&start_date=...&end_date=...&daily=weathercode,precipitation_sum,snowfall_sum,temperature_2m_max,temperature_2m_min,sunshine_duration,windspeed_10m_max&timezone=Europe/Berlin](https://archive-api.open-meteo.com/v1/archive?latitude=48.7657&longitude=11.4231&start_date=...&end_date=...&daily=weathercode,precipitation_sum,snowfall_sum,temperature_2m_max,temperature_2m_min,sunshine_duration,windspeed_10m_max&timezone=Europe/Berlin)
+    ```
+
+    #### 2. Parámetros de Coordenadas y Configuración
+    * **`latitude` y `longitude`**: Coordenadas geográficas fijas de Ingolstadt (`48.7657`, `11.4231`).
+    * **`start_date` y `end_date`**: Rango de fechas dinámico calculado automáticamente en función de los años seleccionados en los filtros de la barra lateral (desde el 1 de enero del año inicial hasta el 31 de diciembre o la fecha actual del año en curso).
+    * **`timezone`**: Configurado en `Europe/Berlin` para alinear correctamente los registros diarios con la zona horaria local.
+
+    #### 3. Variables Meteorológicas Solicitadas (`daily`)
+    La API devuelve un conjunto de métricas diarias que el script procesa y transforma:
+    * **`weathercode`**: Código de condición meteorológica (WMO Weather interpretation codes). Se utiliza para clasificar y renderizar los iconos y textos descriptivos (*☀️ Soleado, ⛅ Parcialmente nublado, ☁️ Cubierto, 🌧️ Lluvioso, ❄️ Nevado*).
+    * **`sunshine_duration`**: Duración de la insolación expresada en segundos. El script la divide entre `3600` para transformarla en **Horas de Sol** netas (`Horas_Sol`) y calcula de forma complementaria las **Horas de Nubes** estimadas.
+    * **`temperature_2m_max` / `temperature_2m_min`**: Temperaturas máximas y mínimas diarias registradas a 2 metros de altura (en **°C**).
+    * **`precipitation_sum`**: Precipitación total acumulada en forma de lluvia (en **mm**).
+    * **`snowfall_sum`**: Nevadas acumuladas convertidas o medidas (en **cm**).
+    * **`windspeed_10m_max`**: Velocidad máxima del viento a 10 metros de altura (en **km/h**).
+
+    ---
     """)
+    
