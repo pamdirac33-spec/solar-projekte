@@ -61,7 +61,7 @@ st.markdown("""
 st.markdown(
     """
     <div class="big-title">☀️ Dashboard: Energía Solar & Paneles Fotovoltaicos</div>
-    <div class="sub-title"><i>Análisis detallado de producción, consumo y flujos de red [05.10.2026]</i></div>
+    <div class="sub-title" style="margin-left: 10%;"><i>Análisis detallado de producción, consumo y flujos de red [05.10.2026]</i></div>
     """,
     unsafe_allow_html=True,
 )
@@ -969,19 +969,21 @@ with tab4:
     # Obtenemos las coordenadas reales de lo que escriba el usuario
     LAT_LOC, LON_LOC, nombre_loc = buscar_coordenadas(busqueda_usuario)
 
-    def obtener_info_clima(code):
-        if code == 0:
+    def obtener_info_clima(code, horas_sol=0):
+        # Si el código es 0, o si ha tenido bastantes horas de sol reales (ej. > 4h), 
+        # lo consideramos soleado o mayormente despejado.
+        if code == 0 or horas_sol >= 9:
             return "☀️ Soleado"
-        elif code in [1, 2]:
+        elif code in [1, 2] or (2 <= horas_sol < 5):
             return "⛅ Parcialmente nublado"
         elif code == 3:
-            return "☁️ Cubierto"
+            return "☁️ Nublado"
         elif code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
             return "🌧️ Lluvioso"
         elif code in [71, 73, 75, 85, 86]:
             return "❄️ Nieve"
         else:
-            return "☁️ Nublado"
+            return "⛅ Parcialmente nublado" # Cambiado de "Nublado" por defecto a algo más flexible
 
     def obtener_icono_corto(code):
         if code == 0:
@@ -1026,12 +1028,17 @@ with tab4:
                                     7: "Jul", 8: "Aug", 9: "Sep", 10: "Okt", 11: "Nov", 12: "Dez"}
                         df_w["Mes"] = df_w["Mes_Num"].map(meses_es)
                         
-                        df_w["Clima_Texto"] = [obtener_info_clima(code) for code in df_w["weathercode"]]
-                        df_w["Icono"] = [obtener_icono_corto(code) for code in df_w["weathercode"]]
-                        
+                        # 1. Primero calculamos las horas de sol
                         df_w["Horas_Sol"] = (df_w["sunshine_duration"].fillna(0) / 3600).round(1) if "sunshine_duration" in df_w else 0
                         df_w["Horas_Nubes"] = (12 - df_w["Horas_Sol"]).clip(lower=0).round(1)
                         
+                        # 2. Evaluamos el texto del clima pasándole las horas de sol reales
+                        df_w["Clima_Texto"] = [obtener_info_clima(code, sol) for code, sol in zip(df_w["weathercode"], df_w["Horas_Sol"])]
+                        df_w["Icono"] = [
+                            "☀️" if "Soleado" in t else ("⛅" if "Parcial" in t else ("🌧️" if "Lluvia" in t else ("❄️" if "Nieve" in t else "☁️"))) 
+                            for t in df_w["Clima_Texto"]
+                        ]
+
                         df_w = df_w.rename(columns={
                             "precipitation_sum": "Lluvia", 
                             "snowfall_sum": "Nieve",
@@ -1191,7 +1198,7 @@ with tab4:
                     paper_bgcolor="#f4f4f4",
                     font_color="#222",
                     height=580,
-                    title=f"    Producción y Consumo Total vs Meteo ({nombre_loc})",
+                    title=f"    Producción y Consumo Total vs Meteo en:   <i>{nombre_loc}</i>",
                     xaxis=dict(
                         title="Fecha",
                         tickmode="array",
