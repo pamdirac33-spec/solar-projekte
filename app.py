@@ -493,6 +493,7 @@ with tab1:
         # ---------------------------------------------------------
         # TABLA ADICIONAL DE MÁXIMOS Y MÍNIMOS POR TIPO (AÑO MOSTRADO)
         # ---------------------------------------------------------
+        st.markdown("---")
         st.markdown("#### 📋 Resumen Anual: Máximos y Mínimos por Tipo")
         
         # Filtramos datos para el año/s seleccionado/s en la gráfica anterior
@@ -826,13 +827,23 @@ with tab3:
         "From Netz": "#5DADE2"   # Azul claro de red (consumo)
     }
 
+    # Diccionario de iconos para cada tipo
+    iconos_map = {
+        "Produced": "☀️",
+        "Consumed": "🏠",
+        "PV Used": "🔋",
+        "To Netz": "➡⚡",
+        "From Netz": "⬅️🔌"
+    }
+
     # Fila 1: Producción y derivados
     tipos_fila1 = ["Produced", "PV Used", "To Netz"]
     cols1 = st.columns(3)
 
     for i, t in enumerate(tipos_fila1):
         with cols1[i]:
-            st.markdown(f"#### {t}")
+            icono = iconos_map.get(t, "📊")
+            st.markdown(f"#### {icono} {t}")
             df_t = df_anual_full[df_anual_full["Tipo"] == t].sort_values("Año")
 
             x_numeric = list(range(len(df_t)))
@@ -881,7 +892,8 @@ with tab3:
 
     for i, t in enumerate(tipos_fila2):
         with cols2[i]:
-            st.markdown(f"#### {t}")
+            icono = iconos_map.get(t, "📊")
+            st.markdown(f"#### {icono} {t}")
             df_t = df_anual_full[df_anual_full["Tipo"] == t].sort_values("Año")
 
             x_numeric = list(range(len(df_t)))
@@ -972,32 +984,36 @@ with tab4:
     def obtener_info_clima(code, horas_sol=0):
         # Si el código es 0, o si ha tenido bastantes horas de sol reales (ej. > 4h), 
         # lo consideramos soleado o mayormente despejado.
-        if code == 0 or horas_sol >= 9:
+        if code in [0, 1]:
             return "☀️ Soleado"
-        elif code in [1, 2] or (2 <= horas_sol < 5):
+        elif code == 2:
             return "⛅ Parcialmente nublado"
         elif code == 3:
             return "☁️ Nublado"
-        elif code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
+        elif code in [55, 56, 57, 63, 65, 67, 80, 81, 82]:
             return "🌧️ Lluvioso"
         elif code in [71, 73, 75, 85, 86]:
             return "❄️ Nieve"
+        elif code in [95, 96, 99]:
+            return "🌩️Tormenta"
         else:
             return "⛅ Parcialmente nublado" # Cambiado de "Nublado" por defecto a algo más flexible
 
     def obtener_icono_corto(code):
-        if code == 0:
-            return "☀️"
-        elif code in [1, 2]:
+        if code in [0, 1]:
+            return "☀"
+        elif code == 2:
             return "⛅"
         elif code == 3:
-            return "☁️"
-        elif code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
-            return "🌧️"
+            return "☁"
+        elif code in [55, 56, 57, 63, 65, 67, 80, 81, 82]:
+            return "🌧"
         elif code in [71, 73, 75, 85, 86]:
-            return "❄️"
+            return "❄"
+        elif code in [95, 96, 99]:
+            return "🌩"
         else:
-            return "☁️"
+            return "⛅"
 
     if años_sel and meses_sel:
         try:
