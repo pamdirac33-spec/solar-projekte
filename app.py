@@ -615,7 +615,7 @@ with tab2:
 
     st.plotly_chart(fig_anim_mes, use_container_width=True)
 
-    # =========================================================
+# =========================================================
     # Producción Mensual
     # =========================================================
     st.subheader("🔆 Producción Mensual — PV Used / To Netz")
@@ -630,6 +630,18 @@ with tab2:
         fill_value=0
     ).reset_index()
 
+    # 1. FORZAMOS QUE EXISTAN TODOS LOS MESES DE LA LISTA EN EL EJE X POR CADA AÑO
+    años_unicos = sorted(df_kpi["Año"].unique()) if not df_kpi.empty else sorted(df_long["Año"].unique())
+    idx_completo = pd.MultiIndex.from_product([años_unicos, orden_meses], names=["Año", "Mes"])
+    
+    if not dfp.empty:
+        dfp = dfp.set_index(["Año", "Mes"]).reindex(idx_completo, fill_value=0).reset_index()
+    else:
+        dfp = pd.DataFrame(columns=["Año", "Mes", "Produced", "PV Used", "To Netz"])
+        dfp["Año"] = [a for a in años_unicos for _ in orden_meses]
+        dfp["Mes"] = orden_meses * len(años_unicos)
+        dfp.fillna(0, inplace=True)
+
     # Calculamos el número de mes para armar el YYYY.MM
     dfp["Mes_Num"] = dfp["Mes"].map(lambda m: orden_meses.index(m) + 1 if m in orden_meses else 1)
     dfp["Mes"] = pd.Categorical(dfp["Mes"], categories=orden_meses, ordered=True)
@@ -638,7 +650,6 @@ with tab2:
     fig_prod = go.Figure()
 
     # Paletas por año con amarillos/dorados de alta visibilidad
-    años_unicos = sorted(dfp["Año"].unique())
     colores_produced = ["#F4D03F", "#F1C40F", "#D4AC0D", "#B7950B"]
     colores_pvused   = ["#D5D8DC", "#A6ACAF", "#7F8C8D", "#566573"]
     colores_tonetz   = ["#85C1E9", "#5DADE2", "#3498DB", "#2E86C1"]
@@ -714,7 +725,7 @@ with tab2:
     st.plotly_chart(fig_prod, use_container_width=True)
 
     # ---------------------------------------------------------
-    # ⚡ CONSUMO MENSUAL (CORREGIDA)
+    # ⚡ CONSUMO MENSUAL
     # ---------------------------------------------------------
     st.subheader("⚡ Consumo Mensual — PV Used / From Netz")
 
@@ -728,6 +739,15 @@ with tab2:
         fill_value=0
     ).reset_index()
 
+    # FORZAMOS IGUALMENTE EL EJE X COMPLETO PARA CONSUMO
+    if not dfc.empty:
+        dfc = dfc.set_index(["Año", "Mes"]).reindex(idx_completo, fill_value=0).reset_index()
+    else:
+        dfc = pd.DataFrame(columns=["Año", "Mes", "Consumed", "PV Used", "From Netz"])
+        dfc["Año"] = [a for a in años_unicos for _ in orden_meses]
+        dfc["Mes"] = orden_meses * len(años_unicos)
+        dfc.fillna(0, inplace=True)
+
     dfc["Mes_Num"] = dfc["Mes"].map(lambda m: orden_meses.index(m) + 1 if m in orden_meses else 1)
     dfc["Mes"] = pd.Categorical(dfc["Mes"], categories=orden_meses, ordered=True)
     dfc = dfc.sort_values(["Mes", "Año"])
@@ -735,7 +755,6 @@ with tab2:
     fig_con = go.Figure()
 
     # Paletas por año con los mismos tonos intensos para PV Used
-    años_unicos = sorted(dfc["Año"].unique())
     colores_consumed = ["#A6ACAF", "#909497", "#7B7D7D", "#626567"]
     colores_pvused   = ["#F4D03F", "#F1C40F", "#D4AC0D", "#B7950B"]
     colores_fromnetz = ["#85C1E9", "#5DADE2", "#3498DB", "#2E86C1"]
@@ -1320,16 +1339,60 @@ with tab4:
 with tab5:
     st.subheader("📄 Tabla Datos")
 
-    mostrar_tabla = st.toggle("Mostrar / Ocultar Tabla")
+    tabla_wide = df_filtrado.pivot_table(
+        index=["Año", "Mes", "Tipo"],
+        columns="Día",
+        values="Valor"
+    ).reset_index()
 
-    if mostrar_tabla:
-        tabla_wide = df_filtrado.pivot_table(
-            index=["Año", "Mes", "Tipo"],
-            columns="Día",
-            values="Valor"
-        ).reset_index()
+    # Ordenar por Año de mayor a menor y por Mes de mayor a menor (inverso al orden_meses)
+    tabla_wide["Mes_Num"] = tabla_wide["Mes"].map(lambda m: orden_meses.index(m) if m in orden_meses else 0)
+    tabla_wide = tabla_wide.sort_values(by=["Año", "Mes_Num"], ascending=[False, False]).drop(columns=["Mes_Num"])
 
-        st.dataframe(tabla_wide)
+    # Diccionario de colores base pasteles y suaves en formato RGB por mes
+    rgb_meses = {
+        "Jan": (245, 247, 250),
+        "Feb": (240, 248, 245),
+        "Mar": (253, 251, 238),
+        "Avr": (248, 243, 250),
+        "Mai": (253, 242, 242),
+        "Jun": (238, 248, 246),
+        "Jul": (254, 250, 236),
+        "Aug": (252, 242, 234),
+        "Sep": (244, 238, 248),
+        "Okt": (232, 246, 243),
+        "Nov": (253, 245, 245),
+        "Dez": (240, 250, 248)
+    }
+    
+    # Ajuste muy sutil de tono por tipo para generar un degradado suave
+    ajuste_tipo = {
+        "Produced": 0,
+        "Consumed": -4,
+        "PV Used": -8,
+        "To Netz": -12,
+        "From Netz": -16
+    }
+
+    def estilizar_tabla(df):
+        def estilizar_fila(row):
+            mes = row["Mes"]
+            tipo = row["Tipo"]
+            rgb = rgb_meses.get(mes, (245, 245, 245))
+            ajuste = ajuste_tipo.get(tipo, 0)
+            
+            # Calculamos el color manteniendo los límites RGB (0-255)
+            r = max(0, min(255, rgb[0] + ajuste))
+            g = max(0, min(255, rgb[1] + ajuste))
+            b = max(0, min(255, rgb[2] + ajuste))
+            
+            return [f"background-color: rgb({r}, {g}, {b})" for _ in row]
+
+        return df.style.apply(estilizar_fila, axis=1)
+
+    # Mostramos la tabla directamente con los estilos suaves, ordenada de forma inversa y sin índice vacío
+    st.dataframe(estilizar_tabla(tabla_wide), hide_index=True)
+    
 
 # =========================================================
 # 6) ℹ️ RESOURCES / INFO
