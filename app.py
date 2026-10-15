@@ -1137,15 +1137,17 @@ with tab4:
     def obtener_info_clima(code, horas_sol=0):
         # Si el código es 0, o si ha tenido bastantes horas de sol reales (ej. > 4h), 
         # lo consideramos soleado o mayormente despejado.
-        if code in [0, 1]:
+        if code in [0, 1] or horas_sol >= 10.5:
             return "☀️ Soleado"
-        elif code == 2:
+        elif code == 2 or (horas_sol >= 5.5 and horas_sol < 10.5):
             return "⛅ Parcialmente nublado"
         elif code == 3:
             return "☁️ Nublado"
-        elif code in [55, 56, 57, 63, 65, 67, 80, 81, 82]:
+        elif code in [45, 48]:
+            return "🌁️ Niebla"
+        elif code in [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82]:
             return "🌧️ Lluvioso"
-        elif code in [71, 73, 75, 85, 86]:
+        elif code in [71, 73, 75, 77, 85, 86]:
             return "❄️ Nieve"
         elif code in [95, 96, 99]:
             return "🌩️Tormenta"
@@ -1153,15 +1155,17 @@ with tab4:
             return "⛅ Parcialmente nublado" # Cambiado de "Nublado" por defecto a algo más flexible
 
     def obtener_icono_corto(code):
-        if code in [0, 1]:
+        if code in [0, 1] or horas_sol >= 10.5:
             return "☀"
-        elif code == 2:
+        elif code == 2 or (horas_sol >= 5.5 and horas_sol < 10.5):
             return "⛅"
         elif code == 3:
             return "☁"
-        elif code in [55, 56, 57, 63, 65, 67, 80, 81, 82]:
-            return "🌧"
-        elif code in [71, 73, 75, 85, 86]:
+        elif code in [45, 48]:
+            return "🌁"
+        elif code in [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82]:
+            return "☔"
+        elif code in [71, 73, 75, 77, 85, 86]:
             return "❄"
         elif code in [95, 96, 99]:
             return "🌩"
