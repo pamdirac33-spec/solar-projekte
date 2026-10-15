@@ -307,13 +307,14 @@ st.markdown("---")
 # ---------------------------------------------------------
 # PESTAÑAS CON LAS GRÁFICAS (JUSTO DEBAJO DE LOS KPIS)
 # ---------------------------------------------------------
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📈 Evolución Diaria",
     "📊 Distribución Mensual",
     "📅 Evolución Anual",
     "🌤 Paneles y Clima",
     "📄 Tabla de Datos",
-    "ℹ️ Resources/Info"
+    "ℹ️ Resources/Info",
+    "📖 Manual de Usuario"
 ])
 
 # =========================================================
@@ -366,7 +367,19 @@ with tab1:
         legend_title_text="Año - Mes - Tipo",
         margin=dict(l=40, r=150, t=60, b=40),
         height=550,
-        yaxis_title="kWh"
+        yaxis_title="kWh",
+        xaxis=dict(
+            showline=True,
+            linewidth=1.5,
+            linecolor="black",
+            mirror=False
+        ),
+        yaxis=dict(
+            showline=True,
+            linewidth=1.5,
+            linecolor="black",
+            mirror=False
+        )
     )
 
     dias_presentes = sorted(df_filtrado["Día"].unique())
@@ -468,13 +481,21 @@ with tab1:
                 tickangle=-45,
                 showgrid=True,
                 gridcolor="rgba(0,0,0,0.08)",
-                zeroline=False
+                zeroline=False,
+                showline=True,
+                linewidth=1.5,
+                linecolor="black",
+                mirror=False
             ),
             yaxis=dict(
                 title="kWh",
                 showgrid=True,
                 gridcolor="rgba(0,0,0,0.1)",
-                zeroline=False
+                zeroline=False,
+                showline=True,
+                linewidth=1.5,
+                linecolor="black",
+                mirror=False
             ),
             hovermode="x unified"
         )
@@ -602,6 +623,23 @@ with tab2:
             for trace_data in frame.data:
                 trace_data.hovertemplate = mi_hovertemplate
 
+    # Creamos las formas (shapes) para las líneas verticales de cada día
+    dias_presentes_anim = sorted(df_anim["Día"].unique())
+    formas_verticales = [
+        dict(
+            type="line",
+            x0=d, x1=d,
+            y0=0, y1=1,
+            yref="paper",  # Hace que la línea abarque toda la altura vertical del gráfico
+            line=dict(
+                color="rgba(0, 0, 0, 0.12)",
+                width=1,
+                dash="dot"
+            )
+        )
+        for d in dias_presentes_anim
+    ]
+
     fig_anim_mes.update_layout(
         hovermode="x unified",
         plot_bgcolor="#f4f4f4",
@@ -610,12 +648,31 @@ with tab2:
         legend_title_text="Año - Tipo",
         margin=dict(l=40, r=150, t=60, b=40),
         height=550,
-        yaxis_title="kWh"
+        yaxis_title="kWh",
+        shapes=formas_verticales,  # 👈 Añadimos las líneas verticales aquí para que funcionen con la animación
+        xaxis=dict(
+            showline=True,
+            linewidth=1.5,
+            linecolor="black",
+            mirror=False,
+            showgrid=True,
+            gridcolor="rgba(0,0,0,0.08)",
+            zeroline=False
+        ),
+        yaxis=dict(
+            showline=True,
+            linewidth=1.5,
+            linecolor="black",
+            mirror=False,
+            showgrid=True,
+            gridcolor="rgba(0,0,0,0.1)",
+            zeroline=False
+        )
     )
 
     st.plotly_chart(fig_anim_mes, use_container_width=True)
 
-# =========================================================
+    # =========================================================
     # Producción Mensual
     # =========================================================
     st.subheader("🔆 Producción Mensual — PV Used / To Netz")
@@ -712,6 +769,24 @@ with tab2:
             hoverinfo="skip"
         )
 
+    # Creamos las líneas divisorias verticales para separar los meses (de -0.5 a len(orden_meses) - 0.5)
+    shapes_meses = [
+        dict(
+            type="line",
+            x0=i - 0.5,
+            x1=i - 0.5,
+            y0=0,
+            y1=1,
+            yref="paper",
+            line=dict(
+                color="rgba(0, 0, 0, 0.15)",
+                width=1,
+                dash="dot"
+            )
+        )
+        for i in range(len(orden_meses) + 1)
+    ]
+
     fig_prod.update_layout(
         barmode="relative",
         plot_bgcolor="#f4f4f4",
@@ -719,11 +794,29 @@ with tab2:
         font_color="#222",
         height=550,
         hovermode="closest",
-        yaxis_title="kWh"
+        yaxis_title="kWh",
+        shapes=shapes_meses,  # 👈 Añadimos las líneas delimitadoras verticales punteadas
+        xaxis=dict(
+            showline=True,
+            linewidth=1.5,
+            linecolor="black",
+            mirror=False,
+            showgrid=False,  # Ocultamos la rejilla vertical por defecto para que manden las formas delimitadoras
+            zeroline=False
+        ),
+        yaxis=dict(
+            showline=True,
+            linewidth=1.5,
+            linecolor="black",
+            mirror=False,
+            showgrid=True,
+            gridcolor="rgba(0,0,0,0.1)",
+            zeroline=False
+        )
     )
 
     st.plotly_chart(fig_prod, use_container_width=True)
-
+    
     # ---------------------------------------------------------
     # ⚡ CONSUMO MENSUAL
     # ---------------------------------------------------------
@@ -817,6 +910,24 @@ with tab2:
             hoverinfo="skip"
         )
 
+    # Creamos las líneas divisorias verticales para separar los meses
+    shapes_meses_con = [
+        dict(
+            type="line",
+            x0=i - 0.5,
+            x1=i - 0.5,
+            y0=0,
+            y1=1,
+            yref="paper",
+            line=dict(
+                color="rgba(0, 0, 0, 0.15)",
+                width=1,
+                dash="dot"
+            )
+        )
+        for i in range(len(orden_meses) + 1)
+    ]
+
     fig_con.update_layout(
         barmode="relative",
         plot_bgcolor="#f4f4f4",
@@ -824,10 +935,29 @@ with tab2:
         font_color="#222",
         height=550,
         hovermode="closest",
-        yaxis_title="kWh"
+        yaxis_title="kWh",
+        shapes=shapes_meses_con,  # 👈 Líneas delimitadoras verticales punteadas para separar meses
+        xaxis=dict(
+            showline=True,
+            linewidth=1.5,
+            linecolor="black",
+            mirror=False,
+            showgrid=False,  # Ocultamos grid vertical para que manden las líneas delimitadoras
+            zeroline=False
+        ),
+        yaxis=dict(
+            showline=True,
+            linewidth=1.5,
+            linecolor="black",
+            mirror=False,
+            showgrid=True,
+            gridcolor="rgba(0,0,0,0.1)",
+            zeroline=False
+        )
     )
 
     st.plotly_chart(fig_con, use_container_width=True)
+
     
 # =========================================================
 # 3) 📅 VISTA ANUAL (Cuadrícula 2x3)
@@ -836,12 +966,15 @@ with tab3:
     st.subheader("📅 Vista Anual")
 
     df_anual_full = df_long.groupby(["Año", "Tipo"])["Valor"].sum().reset_index()
+    df_anual_full["Valor_MWh"] = df_anual_full["Valor"] / 1000.0
+    # Formateamos con 2 decimales y reemplazamos el punto por coma
+    df_anual_full["Valor_Str"] = df_anual_full["Valor_MWh"].apply(lambda x: f"{x:.2f}".replace('.', ','))
 
     # Definimos los colores base que usábamos en el tab3 para mantener coherencia
     colores_map = {
         "Produced": "#F1C40F",   # Amarillo principal
         "Consumed": "#7B7D7D",   # Gris oscuro principal
-        "PV Used": "#566573",    # Gris/azulado de apilado
+        "PV Used": "#00C268",    # Verde / Gris de apilado
         "To Netz": "#3498DB",    # Azul de red (producción)
         "From Netz": "#5DADE2"   # Azul claro de red (consumo)
     }
@@ -867,28 +1000,30 @@ with tab3:
 
             x_numeric = list(range(len(df_t)))
             x_labels = df_t["Año"].astype(str).tolist()
-            anios_custom = df_t["Año"].tolist()
+            
+            # Combinamos Año y el valor con coma en customdata
+            customdata_arr = df_t[["Año", "Valor_Str"]].values.tolist()
             color_actual = colores_map.get(t, "#F7DC6F")
 
             fig = go.Figure()
 
             fig.add_trace(go.Bar(
                 x=x_numeric,
-                y=df_t["Valor"],
+                y=df_t["Valor_MWh"],
                 marker_color=color_actual,
                 width=0.25,
-                customdata=anios_custom,
-                hovertemplate=f"<b>%{{customdata}}</b><br><span style='color:{color_actual}'><b>{t}:</b> %{{y:,.2f}} kWh</span><extra></extra>"
+                customdata=customdata_arr,
+                hovertemplate=f"<b>%{{customdata[0]}}</b><br><span style='color:{color_actual}'><b>{t}:</b> %{{customdata[1]}} MWh</span><extra></extra>"
             ))
 
             fig.add_trace(go.Scatter(
                 x=x_numeric,
-                y=df_t["Valor"],
+                y=df_t["Valor_MWh"],
                 mode="lines+markers",
                 line=dict(color=color_actual, width=2),
                 marker=dict(size=5),
-                customdata=anios_custom,
-                hovertemplate=f"<b>%{{customdata}}</b><br><span style='color:{color_actual}'><b>{t}:</b> %{{y:,.2f}} kWh</span><extra></extra>"
+                customdata=customdata_arr,
+                hovertemplate=f"<b>%{{customdata[0]}}</b><br><span style='color:{color_actual}'><b>{t}:</b> %{{customdata[1]}} MWh</span><extra></extra>"
             ))
 
             fig.update_layout(
@@ -900,7 +1035,7 @@ with tab3:
                 showlegend=False,
                 hovermode="closest",
                 xaxis=dict(tickmode="array", tickvals=x_numeric, ticktext=x_labels, showgrid=False, zeroline=False),
-                yaxis=dict(title="kWh", showgrid=True, gridcolor="rgba(0,0,0,0.15)", zeroline=False)
+                yaxis=dict(title="MWh", showgrid=True, gridcolor="rgba(0,0,0,0.15)", zeroline=False)
             )
 
             st.plotly_chart(fig, use_container_width=True, key=f"anual_f1_{t}")
@@ -917,28 +1052,28 @@ with tab3:
 
             x_numeric = list(range(len(df_t)))
             x_labels = df_t["Año"].astype(str).tolist()
-            anios_custom = df_t["Año"].tolist()
+            customdata_arr = df_t[["Año", "Valor_Str"]].values.tolist()
             color_actual = colores_map.get(t, "#2980B9")
 
             fig = go.Figure()
 
             fig.add_trace(go.Bar(
                 x=x_numeric,
-                y=df_t["Valor"],
+                y=df_t["Valor_MWh"],
                 marker_color=color_actual,
                 width=0.25,
-                customdata=anios_custom,
-                hovertemplate=f"<b>%{{customdata}}</b><br><span style='color:{color_actual}'><b>{t}:</b> %{{y:,.2f}} kWh</span><extra></extra>"
+                customdata=customdata_arr,
+                hovertemplate=f"<b>%{{customdata[0]}}</b><br><span style='color:{color_actual}'><b>{t}:</b> %{{customdata[1]}} MWh</span><extra></extra>"
             ))
 
             fig.add_trace(go.Scatter(
                 x=x_numeric,
-                y=df_t["Valor"],
+                y=df_t["Valor_MWh"],
                 mode="lines+markers",
                 line=dict(color=color_actual, width=2),
                 marker=dict(size=5),
-                customdata=anios_custom,
-                hovertemplate=f"<b>%{{customdata}}</b><br><span style='color:{color_actual}'><b>{t}:</b> %{{y:,.2f}} kWh</span><extra></extra>"
+                customdata=customdata_arr,
+                hovertemplate=f"<b>%{{customdata[0]}}</b><br><span style='color:{color_actual}'><b>{t}:</b> %{{customdata[1]}} MWh</span><extra></extra>"
             ))
 
             fig.update_layout(
@@ -950,7 +1085,7 @@ with tab3:
                 showlegend=False,
                 hovermode="closest",
                 xaxis=dict(tickmode="array", tickvals=x_numeric, ticktext=x_labels, showgrid=False, zeroline=False),
-                yaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.15)", zeroline=False)
+                yaxis=dict(title="MWh", showgrid=True, gridcolor="rgba(0,0,0,0.15)", zeroline=False)
             )
 
             st.plotly_chart(fig, use_container_width=True, key=f"anual_f2_{t}")
@@ -963,7 +1098,6 @@ with tab4:
     import requests
     from datetime import date
 
-    st.markdown("---")
     st.subheader("🌤️ Panel Meteorológico")
     st.markdown("*Datos públicos de tiempo vs producción y consumo total para los meses seleccionados.*")
 
@@ -1160,8 +1294,8 @@ with tab4:
                     y=df_pivot["Produced"],
                     mode="lines+markers",
                     name="Produced",
-                    line=dict(width=2, color="#B8860B"),
-                    marker=dict(color="#B8860B", size=6),
+                    line=dict(width=2, color="#F1C40F"),
+                    marker=dict(color="#F1C40F", size=6),
                     customdata=customdata_arr,
                     hovertemplate=(
                         "<b>%{customdata[0]}</b><br>"
@@ -1349,23 +1483,35 @@ with tab5:
     tabla_wide["Mes_Num"] = tabla_wide["Mes"].map(lambda m: orden_meses.index(m) if m in orden_meses else 0)
     tabla_wide = tabla_wide.sort_values(by=["Año", "Mes_Num"], ascending=[False, False]).drop(columns=["Mes_Num"])
 
-    # Diccionario de colores base pasteles y suaves en formato RGB por mes
+    # Identificamos las columnas de los días originales (números)
+    dias_cols_originales = [c for c in tabla_wide.columns if c not in ["Año", "Mes", "Tipo"]]
+
+    # Renombramos las columnas de los días al formato "Day 01", "Day 02", etc.
+    rename_mapping = {c: f"Day {str(c).zfill(2)}" for c in dias_cols_originales}
+    tabla_wide = tabla_wide.rename(columns=rename_mapping)
+    dias_cols = list(rename_mapping.values())
+
+    # Transformamos los valores numéricos de los días a texto con " kWh" y dejamos los nulos completamente vacíos ""
+    for col in dias_cols:
+        tabla_wide[col] = tabla_wide[col].apply(lambda x: f"{x:.2f} kWh" if pd.notna(x) else "")
+
+    # 12 colores pasteles suaves y diferentes para cada uno de los 12 meses
     rgb_meses = {
-        "Jan": (245, 247, 250),
-        "Feb": (240, 248, 245),
-        "Mar": (253, 251, 238),
-        "Avr": (248, 243, 250),
-        "Mai": (253, 242, 242),
-        "Jun": (238, 248, 246),
-        "Jul": (254, 250, 236),
-        "Aug": (252, 242, 234),
-        "Sep": (244, 238, 248),
-        "Okt": (232, 246, 243),
-        "Nov": (253, 245, 245),
-        "Dez": (240, 250, 248)
+        "Jan": (235, 243, 250), # Azul hielo suave
+        "Feb": (232, 246, 243), # Menta suave
+        "Mar": (235, 247, 238), # Verde claro suave
+        "Avr": (245, 249, 233), # Lima suave
+        "Mai": (254, 250, 231), # Amarillo crema suave
+        "Jun": (253, 242, 233), # Durazno suave
+        "Jul": (253, 238, 238), # Coral suave
+        "Aug": (250, 238, 245), # Rosa suave
+        "Sep": (242, 239, 250), # Lavanda suave
+        "Okt": (238, 242, 252), # Violeta claro suave
+        "Nov": (243, 240, 238), # Topo / Gris cálido suave
+        "Dez": (230, 240, 248)  # Azul acero suave
     }
     
-    # Ajuste muy sutil de tono por tipo para generar un degradado suave
+    # Ajuste muy sutil de tono por tipo para generar un degradado ordenado
     ajuste_tipo = {
         "Produced": 0,
         "Consumed": -4,
@@ -1381,7 +1527,6 @@ with tab5:
             rgb = rgb_meses.get(mes, (245, 245, 245))
             ajuste = ajuste_tipo.get(tipo, 0)
             
-            # Calculamos el color manteniendo los límites RGB (0-255)
             r = max(0, min(255, rgb[0] + ajuste))
             g = max(0, min(255, rgb[1] + ajuste))
             b = max(0, min(255, rgb[2] + ajuste))
@@ -1390,17 +1535,27 @@ with tab5:
 
         return df.style.apply(estilizar_fila, axis=1)
 
-    # Mostramos la tabla directamente con los estilos suaves, ordenada de forma inversa y sin índice vacío
+    # Estilo CSS para forzar las cabeceras de la tabla en negrita y color negro
+    st.markdown("""
+    <style>
+    [data-testid="stDataFrame"] th {
+        color: #000000 !important;
+        font-weight: 700 !important;
+        background-color: #eaecef !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Mostramos la tabla formateada y estilizada
     st.dataframe(estilizar_tabla(tabla_wide), hide_index=True)
     
-
 # =========================================================
 # 6) ℹ️ RESOURCES / INFO
 # =========================================================
 with tab6:
     st.markdown("""
     ### ℹ️ About Dashboard Solar App
-    * **Script created by:** dJoZeR - Ingolstadt, 2026
+    * **Script by:** dJoZeR - Ingolstadt, 2026
     * **Created with the help of:** Copilot and Gemini
 
     ---
@@ -1451,4 +1606,69 @@ with tab6:
 
     ---
     """)
-    
+
+# =========================================================
+# 7) 📖 MANUAL DE USUARIO
+# =========================================================
+with tab7:
+    st.subheader("📖 Manual de Usuario: Dashboard de Energía Solar")
+    st.markdown("""
+    Este manual proporciona una guía detallada sobre el funcionamiento de los filtros, la interpretación de las métricas clave (KPIs) y el análisis de cada una de las gráficas disponibles en las diferentes pestañas del panel.
+
+    ---
+
+    ### ⚙️ Barra Lateral (Panel de Filtros)
+    Los filtros de la barra lateral controlan el subconjunto de datos que se procesa en todo el dashboard:
+    * **Años:** Permite seleccionar uno o varios años de estudio. Por defecto, el sistema detecta automáticamente el año más reciente con registros.
+    * **Meses:** Permite filtrar por meses específicos (`Jan` a `Dez`). Cuenta con un botón de selección rápida (*Select All / Deselect All*).
+    * **Tipos de dato:** Filtra las categorías energéticas principales:
+      * **Produced:** Energía total generada por los paneles fotovoltaicos.
+      * **Consumed:** Energía total consumida por el hogar o instalación.
+      * **PV Used:** Autoconsumo directo (energía solar utilizada instantáneamente en el hogar).
+      * **To Netz:** Excedentes de energía solar vertidos a la red eléctrica.
+      * **From Netz:** Electricidad importada/comprada de la red eléctrica.
+    * **Rango de días:** Deslizador (*slider*) para acotar el análisis a un periodo de días específico dentro de los meses seleccionados.
+    * **Uploader de Archivos:** Permite cargar un archivo Excel personalizado (`.xlsx`) que cumpla con la estructura requerida (*Wide format*) para analizar tus propios datos.
+
+    ---
+
+    ### 📊 KPIs Principales
+    En la parte superior del cuerpo principal se muestran tarjetas con indicadores clave de rendimiento:
+    * **Producción Total:** Suma total de energía limpia generada en el periodo.
+    * **Consumo Total:** Energía total demandada por la instalación.
+    * **Autoconsumo:** Cantidad y porcentaje de energía solar aprovechada directamente en el hogar respecto a la producción total. Un porcentaje alto indica mayor eficiencia en el uso de la energía generada.
+    * **Dependencia de la Red:** Energía comprada a la compañía eléctrica y su peso porcentual frente al consumo total.
+    * **Excedente:** Energía sobrante vertida a la red y su porcentaje respecto a la producción.
+    * **Autosuficiencia:** Porcentaje del consumo total que ha sido cubierto directamente por la instalación solar sin depender de la red externa.
+
+    ---
+
+    ### 📈 Descripción y Análisis por Pestaña
+
+    #### 📈 Tab 1: Evolución Diaria
+    * **Qué muestra:** Gráficas de líneas con marcadores que representan la evolución diaria de los tipos de datos seleccionados. Incluye una vista detallada por mes y una **Evolución Anual Completa (01 Ene — 31 Dic)** que alinea todo el año en una sola secuencia continua.
+    * **Cómo interpretarlo:** Permite identificar picos de generación en días muy soleados, caídas de producción en días nublados y comparar el comportamiento diario entre diferentes años. Además, incluye una tabla resumen con los valores máximos y mínimos históricos del año.
+
+    #### 🎞️ Tab 2: Distribución Mensual
+    * **Qué muestra:** 
+      * Una gráfica animada por meses que permite ver la progresión diaria de los datos.
+      * Gráficos de barras apiladas mensuales para **Producción** (`Produced` desglosado en `PV Used` y `To Netz`) y **Consumo** (`Consumed` desglosado en `PV Used` y `From Netz`).
+    * **Cómo interpretarlo:** Permite analizar la estacionalidad. Muestra claramente qué meses del año son más productivos (primavera/verano) frente a los meses de mayor demanda energética o dependencia de la red (otoño/invierno).
+
+    #### 📅 Tab 3: Evolución Anual (Cuadrícula 2x3)
+    * **Qué muestra:** Seis minigráficos organizados en dos filas que contraponen la evolución interanual de cada métrica (`Produced`, `Consumed`, `PV Used`, `To Netz`, `From Netz`).
+    * **Cómo interpretarlo:** Facilita la evaluación macroeconómica y técnica de la instalación a lo largo de los años, permitiendo ver si la eficiencia o el consumo general de la vivienda va en aumento o descenso año tras año.
+
+    #### 🌤️ Tab 4: Panel Meteorológico
+    * **Qué muestra:** Una herramienta interactiva conectada a la API histórica de Open-Meteo. Permite introducir cualquier ciudad o código postal del mundo (por defecto *Ingolstadt*) para correlacionar gráficamente las curvas de producción y consumo con variables del clima diario (**temperaturas máx/mín, horas de sol, lluvia, nieve y viento**), acompañada de una tabla detallada.
+    * **Cómo interpretarlo:** Es ideal para entender anomalías en la producción energética. Por ejemplo, permite comprobar visualmente cómo un día con pocas horas de sol o alta precipitación reduce drásticamente la curva de `Produced`.
+
+    #### 📄 Tab 5: Tabla de Datos
+    * **Qué muestra:** Una tabla estilo matriz (*wide*) que cruza los meses, tipos y días del mes. 
+    * **Cómo interpretarlo:** 
+      * Las celdas muestran los valores exactos expresados en **`kWh`** con dos decimales.
+      * Las celdas sin datos (días inexistentes o sin registro) aparecen completamente vacías.
+      * Las filas están coloreadas mediante **12 tonos pasteles suaves y únicos** para cada mes del año, lo que facilita la lectura visual rápida de bloques estacionales sin importar el año.
+
+    ---
+    """)
