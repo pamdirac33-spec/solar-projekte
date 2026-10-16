@@ -1135,42 +1135,35 @@ with tab4:
     LAT_LOC, LON_LOC, nombre_loc = buscar_coordenadas(busqueda_usuario)
 
     def obtener_info_clima(code, horas_sol=0):
-        # Si el código es 0, o si ha tenido bastantes horas de sol reales (ej. > 4h), 
-        # lo consideramos soleado o mayormente despejado.
-        if code in [0, 1] or horas_sol >= 10.5:
-            return "☀️ Soleado"
-        elif code == 2 or (horas_sol >= 5.5 and horas_sol < 10.5):
+        # Si por alguna razón code viene en una lista (ej. [3]), extraemos el primer elemento
+        if isinstance(code, list):
+            code = code[0] if len(code) > 0 else 0
+            
+        # Manejo seguro por si es NaN, nulo o un texto extraño
+        if pd.isna(code):
             return "⛅ Parcialmente nublado"
-        elif code == 3:
+
+        try:
+            code = int(code)
+        except Exception:
+            return "⛅ Parcialmente nublado"
+        
+        if code == 3:
             return "☁️ Nublado"
         elif code in [45, 48]:
             return "🌁️ Niebla"
-        elif code in [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82]:
+        elif code in [53, 55, 56, 57, 63, 65, 66, 67, 80, 81, 82]:
             return "🌧️ Lluvioso"
-        elif code in [71, 73, 75, 77, 85, 86]:
+        elif code in [71, 73, 75, 77, 85, 86] and horas_sol < 10:
             return "❄️ Nieve"
         elif code in [95, 96, 99]:
             return "🌩️Tormenta"
+        elif  code in [2, 51, 61] and (horas_sol >= 5.5 and horas_sol < 10.8):
+            return "⛅ Parcialmente nublado"
+        elif code in [0, 1] or horas_sol >= 10.8:
+            return "☀️ Soleado"
         else:
             return "⛅ Parcialmente nublado" # Cambiado de "Nublado" por defecto a algo más flexible
-
-    def obtener_icono_corto(code):
-        if code in [0, 1] or horas_sol >= 10.5:
-            return "☀"
-        elif code == 2 or (horas_sol >= 5.5 and horas_sol < 10.5):
-            return "⛅"
-        elif code == 3:
-            return "☁"
-        elif code in [45, 48]:
-            return "🌁"
-        elif code in [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82]:
-            return "☔"
-        elif code in [71, 73, 75, 77, 85, 86]:
-            return "❄"
-        elif code in [95, 96, 99]:
-            return "🌩"
-        else:
-            return "⛅"
 
     if años_sel and meses_sel:
         try:
@@ -1208,10 +1201,16 @@ with tab4:
                         # 2. Evaluamos el texto del clima pasándole las horas de sol reales
                         df_w["Clima_Texto"] = [obtener_info_clima(code, sol) for code, sol in zip(df_w["weathercode"], df_w["Horas_Sol"])]
                         df_w["Icono"] = [
-                            "☀️" if "Soleado" in t else ("⛅" if "Parcial" in t else ("🌧️" if "Lluvia" in t else ("❄️" if "Nieve" in t else "☁️"))) 
+                            "☀️" if "Soleado" in t else 
+                            ("⛅" if "Parcial" in t else 
+                            ("☁️" if ("Nublado" in t or "Nubes" in t or "Nubes" in t) else 
+                            ("🌧️" if ("Lluvia" in t or "Lluvioso" in t) else 
+                            ("❄️" if "Nieve" in t else 
+                            ("🌩️" if "Tormenta" in t else 
+                            ("🌁️" if "Niebla" in t else "☁️"))))))
                             for t in df_w["Clima_Texto"]
                         ]
-
+                        
                         df_w = df_w.rename(columns={
                             "precipitation_sum": "Lluvia", 
                             "snowfall_sum": "Nieve",
@@ -1394,6 +1393,14 @@ with tab4:
                         line_width=1,
                         line_dash="dash",
                         line_color="rgba(0, 0, 0, 0.15)"
+                    )
+                # Solo para los días con iconos de tiempo (con punteado 'dot')
+                for idx_icono in df_iconos_filtrados["Secuencia_X"]:
+                    fig_clima.add_vline(
+                        x=idx_icono,
+                        line_width=1,
+                        line_dash="dot",  # Punteado más cerrado y sutil
+                        line_color="rgba(0, 0, 0, 0.10)"  # Color muy ligero para no recargar la gráfica
                     )
 
                 st.plotly_chart(fig_clima, use_container_width=True)
