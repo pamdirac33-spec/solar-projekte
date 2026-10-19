@@ -307,11 +307,12 @@ st.markdown("---")
 # ---------------------------------------------------------
 # PESTAÑAS CON LAS GRÁFICAS (JUSTO DEBAJO DE LOS KPIS)
 # ---------------------------------------------------------
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📈 Evolución Diaria",
     "📊 Distribución Mensual",
     "📅 Evolución Anual",
     "🌤 Paneles y Clima",
+    "💶 Impacto Ambiental & Económico",
     "📄 Tabla de Datos",
     "ℹ️ Resources/Info",
     "📖 Manual de Usuario"
@@ -1475,6 +1476,47 @@ with tab4:
                         )
                     }
                 )
+            else:
+                st.warning("No se pudieron recuperar los datos de Open-Meteo para el rango seleccionado.")
+        
+
+            # =========================================================
+            # 🗓️ GRÁFICA DE CALOR ESTACIONAL (CALENDAR HEATMAP)
+            # =========================================================
+            st.markdown("---")
+            st.subheader("🔥 Heatmap Estacional de Producción Solar")
+            st.markdown("*Matriz de calor que representa la generación diaria de energía (kWh) a lo largo del año.*")
+
+            df_heat_data = df_long[
+                (df_long["Año"].isin(años_sel)) & 
+                (df_long["Tipo"] == "Produced")
+            ].copy()
+
+            if not df_heat_data.empty:
+                pivot_heat = df_heat_data.pivot_table(
+                    index="Mes",
+                    columns="Día",
+                    values="Valor",
+                    aggfunc="sum"
+                ).reindex(orden_meses)
+
+                fig_cal_heat = px.imshow(
+                    pivot_heat,
+                    labels=dict(x="Día del Mes", y="Mes", color="kWh"),
+                    x=pivot_heat.columns,
+                    y=pivot_heat.index,
+                    color_continuous_scale="YlOrRd",
+                    aspect="auto"
+                )
+                fig_cal_heat.update_layout(
+                    plot_bgcolor="#f4f4f4",
+                    paper_bgcolor="#f4f4f4",
+                    font_color="#222",
+                    height=380,
+                    xaxis=dict(title="Día del Mes", dtick=2),
+                    yaxis=dict(title="")
+                )
+                st.plotly_chart(fig_cal_heat, use_container_width=True)
 
             else:
                 st.warning("No se pudieron recuperar los datos de Open-Meteo para el rango seleccionado.")
@@ -1485,10 +1527,86 @@ with tab4:
 
 
 # =========================================================
-# 5) 📄 TABLA FINAL
+# 5) 💶 NUEVO TAB: IMPACTO AMBIENTAL & ECONÓMICO
 # =========================================================
 with tab5:
-    st.subheader("📄 Tabla Datos")
+    st.subheader("💶 Impacto Ambiental y Económico Estimado")
+    st.markdown("*Configura los parámetros económicos y ecológicos mediante los controles deslizantes para calcular el ahorro y la huella de carbono evitada.*")
+
+    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+    with col_s1:
+        precio_luz = st.slider("Precio Electricidad Red (€/kWh)", min_value=0.10, max_value=0.60, value=0.3651, step=0.01, format="%.4f €")
+    with col_s2:
+        cuota_fija = st.slider("Cuota Fija Anual (€/año)", min_value=0.0, max_value=400.0, value=172.56, step=1.0, format="%.2f €")
+    with col_s3:
+        precio_excedente = st.slider("Precio Excedentes (€/kWh)", min_value=0.01, max_value=0.20, value=0.08216, step=0.0005, format="%.5f €")
+    with col_s4:
+        factor_co2 = st.slider("Factor CO₂ Evitado (kg/kWh)", min_value=0.10, max_value=0.60, value=0.30, step=0.01, format="%.2f kg")
+
+    st.markdown("---")
+
+    total_pro = df_kpi[df_kpi["Tipo"] == "Produced"]["Valor"].sum()
+    total_pv_used = df_kpi[df_kpi["Tipo"] == "PV Used"]["Valor"].sum()
+    total_to_netz = df_kpi[df_kpi["Tipo"] == "To Netz"]["Valor"].sum()
+
+    co2_evitado_kg = total_pro * factor_co2
+    co2_evitado_ton = co2_evitado_kg / 1000.0
+    arboles_equivalentes = int(co2_evitado_kg / 22) if co2_evitado_kg > 0 else 0
+
+    ahorro_autoconsumo = total_pv_used * precio_luz
+    ingresos_excedentes = total_to_netz * precio_excedente
+    meses_activos_ratio = len(meses_sel) / 12.0
+    cuota_fija_periodo = cuota_fija * meses_activos_ratio
+    ahorro_total_neto = ahorro_autoconsumo + ingresos_excedentes
+
+    st.markdown("### 🌍 Resumen de Impacto Ecológico")
+    col_env1, col_env2, col_env3 = st.columns(3)
+    with col_env1:
+        st.metric("CO₂ Evitado (Total)", f"{co2_evitado_kg:,.1f} kg".replace(",", "."))
+    with col_env2:
+        st.metric("CO₂ Evitado (Toneladas)", f"{co2_evitado_ton:,.3f} t".replace(",", "."))
+    with col_env3:
+        st.metric("Equivalente en Árboles", f"{arboles_equivalentes:,} árboles/año".replace(",", "."))
+
+    st.markdown("---")
+    st.markdown("### 💰 Resumen Financiero y Ahorro Estimado")
+    col_fin1, col_fin2, col_fin3, col_fin4 = st.columns(4)
+    with col_fin1:
+        st.metric("Ahorro por Autoconsumo", f"{ahorro_autoconsumo:,.2f} €".replace(",", "."))
+    with col_fin2:
+        st.metric("Ingresos por Excedentes", f"{ingresos_excedentes:,.2f} €".replace(",", "."))
+    with col_fin3:
+        st.metric("Ahorro Bruto Estimado", f"{ahorro_total_neto:,.2f} €".replace(",", "."))
+    with col_fin4:
+        st.metric("Cuota Fija (Prorrateada)", f"-{cuota_fija_periodo:,.2f} €".replace(",", "."))
+
+    st.markdown("---")
+    df_financiero = pd.DataFrame({
+        "Concepto": ["Ahorro Autoconsumo", "Ingresos Excedentes"],
+        "Euros": [ahorro_autoconsumo, ingresos_excedentes]
+    })
+    fig_fin = px.bar(
+        df_financiero,
+        x="Concepto",
+        y="Euros",
+        text="Euros",
+        color="Concepto",
+        color_discrete_sequence=["#00C268", "#3498DB"],
+        title="Desglose del Beneficio Económico en el Periodo Seleccionado"
+    )
+    fig_fin.update_traces(texttemplate='%{text:,.2f} €', textposition='outside')
+    fig_fin.update_layout(
+        plot_bgcolor="#f4f4f4", paper_bgcolor="#f4f4f4", font_color="#222",
+        height=400, showlegend=False, yaxis=dict(title="Euros (€)")
+    )
+    st.plotly_chart(fig_fin, use_container_width=True)
+
+
+# =========================================================
+# 6) 📄 TABLA DE DATOS
+# =========================================================
+with tab6:
+    st.subheader("📄 Tabla de Datos")
 
     tabla_wide = df_filtrado.pivot_table(
         index=["Año", "Mes", "Tipo"],
@@ -1582,9 +1700,9 @@ with tab5:
     )
     
 # =========================================================
-# 6) ℹ️ RESOURCES / INFO
+# 7) ℹ️ RESOURCES / INFO
 # =========================================================
-with tab6:
+with tab7:
     st.markdown("""
     ### ℹ️ About Dashboard Solar App
     * **Script by:** dJoZeR - Ingolstadt, 2026
@@ -1640,12 +1758,12 @@ with tab6:
     """)
 
 # =========================================================
-# 7) 📖 MANUAL DE USUARIO
+# 8) 📖 MANUAL DE USUARIO
 # =========================================================
-with tab7:
+with tab8:
     st.subheader("📖 Manual de Usuario: Dashboard de Energía Solar")
     st.markdown("""
-    Este manual proporciona una guía detallada sobre el funcionamiento de los filtros, la interpretación de las métricas clave (KPIs) y el análisis de cada una de las gráficas disponibles en las diferentes pestañas del panel.
+    Este manual proporciona una guía detallada sobre el funcionamiento de los filtros, la interpretación de las métricas clave (KPIs) y el análisis de cada una de las pestañas del panel.
 
     ---
 
@@ -1660,7 +1778,7 @@ with tab7:
       * **To Netz:** Excedentes de energía solar vertidos a la red eléctrica.
       * **From Netz:** Electricidad importada/comprada de la red eléctrica.
     * **Rango de días:** Deslizador (*slider*) para acotar el análisis a un periodo de días específico dentro de los meses seleccionados.
-    * **Uploader de Archivos:** Permite cargar un archivo Excel personalizado (`.xlsx`) que cumpla con la estructura requerida (*Wide format*) para analizar tus propios datos.
+    * **Uploader de Archivos:** Permite cargar un archivo personalizado (`.xlsx`) que cumpla con la estructura requerida (*Wide format*) para analizar tus propios datos.
 
     ---
 
@@ -1668,39 +1786,32 @@ with tab7:
     En la parte superior del cuerpo principal se muestran tarjetas con indicadores clave de rendimiento:
     * **Producción Total:** Suma total de energía limpia generada en el periodo.
     * **Consumo Total:** Energía total demandada por la instalación.
-    * **Autoconsumo:** Cantidad y porcentaje de energía solar aprovechada directamente en el hogar respecto a la producción total. Un porcentaje alto indica mayor eficiencia en el uso de la energía generada.
+    * **Autoconsumo:** Cantidad y porcentaje de energía solar aprovechada directamente en el hogar respecto a la producción total.
     * **Dependencia de la Red:** Energía comprada a la compañía eléctrica y su peso porcentual frente al consumo total.
     * **Excedente:** Energía sobrante vertida a la red y su porcentaje respecto a la producción.
-    * **Autosuficiencia:** Porcentaje del consumo total que ha sido cubierto directamente por la instalación solar sin depender de la red externa.
+    * **Autosuficiencia:** Porcentaje del consumo total cubierto directamente por la instalación solar sin depender de la red externa.
 
     ---
 
     ### 📈 Descripción y Análisis por Pestaña
 
     #### 📈 Tab 1: Evolución Diaria
-    * **Qué muestra:** Gráficas de líneas con marcadores que representan la evolución diaria de los tipos de datos seleccionados. Incluye una vista detallada por mes y una **Evolución Anual Completa (01 Ene — 31 Dic)** que alinea todo el año en una sola secuencia continua.
-    * **Cómo interpretarlo:** Permite identificar picos de generación en días muy soleados, caídas de producción en días nublados y comparar el comportamiento diario entre diferentes años. Además, incluye una tabla resumen con los valores máximos y mínimos históricos del año.
+    * **Qué muestra:** Gráficas de líneas con la evolución diaria de los tipos seleccionados, una vista de **Evolución Anual Completa (01 Ene — 31 Dic)** en secuencia continua y una tabla resumen de máximos y mínimos anuales.
 
     #### 🎞️ Tab 2: Distribución Mensual
-    * **Qué muestra:** 
-      * Una gráfica animada por meses que permite ver la progresión diaria de los datos.
-      * Gráficos de barras apiladas mensuales para **Producción** (`Produced` desglosado en `PV Used` y `To Netz`) y **Consumo** (`Consumed` desglosado en `PV Used` y `From Netz`).
-    * **Cómo interpretarlo:** Permite analizar la estacionalidad. Muestra claramente qué meses del año son más productivos (primavera/verano) frente a los meses de mayor demanda energética o dependencia de la red (otoño/invierno).
+    * **Qué muestra:** Una gráfica animada por meses y gráficos de barras apiladas mensuales para desglosar la **Producción** y el **Consumo** frente al autoconsumo y los flujos de red.
 
     #### 📅 Tab 3: Evolución Anual (Cuadrícula 2x3)
-    * **Qué muestra:** Seis minigráficos organizados en dos filas que contraponen la evolución interanual de cada métrica (`Produced`, `Consumed`, `PV Used`, `To Netz`, `From Netz`).
-    * **Cómo interpretarlo:** Facilita la evaluación macroeconómica y técnica de la instalación a lo largo de los años, permitiendo ver si la eficiencia o el consumo general de la vivienda va en aumento o descenso año tras año.
+    * **Qué muestra:** Seis minigráficos organizados en dos filas que contraponen la evolución interanual de cada métrica energética principal en MWh.
 
-    #### 🌤️ Tab 4: Panel Meteorológico
-    * **Qué muestra:** Una herramienta interactiva conectada a la API histórica de Open-Meteo. Permite introducir cualquier ciudad o código postal del mundo (por defecto *Ingolstadt*) para correlacionar gráficamente las curvas de producción y consumo con variables del clima diario (**temperaturas máx/mín, horas de sol, lluvia, nieve y viento**), acompañada de una tabla detallada.
-    * **Cómo interpretarlo:** Es ideal para entender anomalías en la producción energética. Por ejemplo, permite comprobar visualmente cómo un día con pocas horas de sol o alta precipitación reduce drásticamente la curva de `Produced`.
+    #### 🌤️ Tab 4: Paneles, Clima y Estacionalidad
+    * **Qué muestra:** Correlación entre las curvas de energía y las condiciones meteorológicas reales (temperaturas, horas de sol, viento, lluvia) conectadas a Open-Meteo, acompañada de un **Heatmap Estacional (*Calendar Heatmap*)** para visualizar la generación diaria de energía a lo largo de todo el año.
 
-    #### 📄 Tab 5: Tabla de Datos
-    * **Qué muestra:** Una tabla estilo matriz (*wide*) que cruza los meses, tipos y días del mes. 
-    * **Cómo interpretarlo:** 
-      * Las celdas muestran los valores exactos expresados en **`kWh`** con dos decimales.
-      * Las celdas sin datos (días inexistentes o sin registro) aparecen completamente vacías.
-      * Las filas están coloreadas mediante **12 tonos pasteles suaves y únicos** para cada mes del año, lo que facilita la lectura visual rápida de bloques estacionales sin importar el año.
+    #### 💶 Tab 5: Impacto Ambiental & Económico
+    * **Qué muestra:** Métricas de sostenibilidad (huella de carbono evitada en kg/t y su equivalencia en árboles plantados) y un desglose financiero interactivo. Mediante **controles deslizantes (sliders)** puedes configurar en tiempo real el precio bruto de la electricidad de la red, la cuota fija anual, la compensación por excedentes y el factor de conversión de CO₂.
+
+    #### 📄 Tab 6: Tabla de Datos
+    * **Qué muestra:** Matriz cruzada (*wide*) con valores numéricos limpios y ordenables en kWh, celdas vacías para datos nulos y un estilizado sistema de colores pasteles diferenciados para cada uno de los 12 meses.
 
     ---
     """)
