@@ -312,7 +312,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Distribución Mensual",
     "📅 Evolución Anual",
     "🌤 Paneles y Clima",
-    "💶 Impacto Ambiental & Económico",
+    "💶 Impacto",
     "📄 Tabla de Datos",
     "ℹ️ Resources/Info",
     "📖 Manual de Usuario"
@@ -1535,11 +1535,11 @@ with tab5:
 
     col_s1, col_s2, col_s3, col_s4 = st.columns(4)
     with col_s1:
-        precio_luz = st.slider("Precio Electricidad Red (€/kWh)", min_value=0.10, max_value=0.60, value=0.3651, step=0.01, format="%.4f €")
+        precio_luz = st.slider("Precio Electricidad (€/kWh)", min_value=0.10, max_value=0.60, value=0.3651, step=0.01, format="%.4f €")
     with col_s2:
-        cuota_fija = st.slider("Cuota Fija Anual (€/año)", min_value=0.0, max_value=400.0, value=172.56, step=1.0, format="%.2f €")
+        cuota_fija = st.slider("Contador Adicional (€/año)", min_value=0.0, max_value=400.0, value=213.60, step=1.0, format="%.2f €")
     with col_s3:
-        precio_excedente = st.slider("Precio Excedentes (€/kWh)", min_value=0.01, max_value=0.20, value=0.08216, step=0.0005, format="%.5f €")
+        precio_excedente = st.slider("Precio Excedente (€/kWh)", min_value=0.01, max_value=0.20, value=0.08216, step=0.0005, format="%.5f €")
     with col_s4:
         factor_co2 = st.slider("Factor CO₂ Evitado (kg/kWh)", min_value=0.10, max_value=0.60, value=0.30, step=0.01, format="%.2f kg")
 
@@ -1553,7 +1553,7 @@ with tab5:
     co2_evitado_ton = co2_evitado_kg / 1000.0
     arboles_equivalentes = int(co2_evitado_kg / 22) if co2_evitado_kg > 0 else 0
 
-    ahorro_autoconsumo = total_pv_used * precio_luz
+    ahorro_autoconsumo = total_pv_used * precio_luz + cuota_fija
     ingresos_excedentes = total_to_netz * precio_excedente
     meses_activos_ratio = len(meses_sel) / 12.0
     cuota_fija_periodo = cuota_fija * meses_activos_ratio
