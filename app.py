@@ -1440,11 +1440,17 @@ with tab4:
                     use_container_width=True,
                     hide_index=True,
                     column_config={
+                        "Fecha": st.column_config.TextColumn(
+                            "Fecha", width="medium"
+                        ),
                         "Producción": st.column_config.NumberColumn(
                             "Producción", format="%.2f kWh"
                         ),
                         "Consumo": st.column_config.NumberColumn(
                             "Consumo", format="%.2f kWh"
+                        ),
+                        "Nubosidad": st.column_config.TextColumn(
+                            "Nubosidad", width="medium"
                         ),
                         "Temp Max": st.column_config.NumberColumn(
                             "Temp Max", format="%.1f °C"
@@ -1502,9 +1508,20 @@ with tab5:
     tabla_wide = tabla_wide.rename(columns=rename_mapping)
     dias_cols = list(rename_mapping.values())
 
-    # Transformamos los valores numéricos de los días a texto con " kWh" y dejamos los nulos completamente vacíos ""
+    # ⚠️ IMPORTANTE: Mantenemos los valores como números (floats) para que el ordenamiento 
+    # de Streamlit funcione de forma numérica. Los valores nulos se quedan como NaN automáticamente.
+
+    # Construimos el column_config dinámicamente para formatear los días con " kWh" manteniendo la propiedad numérica
+    column_config_tabla = {
+        "Año": st.column_config.NumberColumn("Año", format="%d"),
+        "Mes": "Mes",
+        "Tipo": "Tipo"
+    }
     for col in dias_cols:
-        tabla_wide[col] = tabla_wide[col].apply(lambda x: f"{x:.2f} kWh" if pd.notna(x) else "")
+        column_config_tabla[col] = st.column_config.NumberColumn(
+            col,
+            format="%.2f kWh"
+        )
 
     # 12 colores pasteles suaves y diferentes para cada uno de los 12 meses
     rgb_meses = {
@@ -1557,8 +1574,12 @@ with tab5:
     </style>
     """, unsafe_allow_html=True)
 
-    # Mostramos la tabla formateada y estilizada
-    st.dataframe(estilizar_tabla(tabla_wide), hide_index=True)
+    # Mostramos la tabla aplicando los estilos y la configuración de columnas numéricas
+    st.dataframe(
+        estilizar_tabla(tabla_wide), 
+        hide_index=True,
+        column_config=column_config_tabla
+    )
     
 # =========================================================
 # 6) ℹ️ RESOURCES / INFO
