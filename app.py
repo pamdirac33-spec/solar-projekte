@@ -312,9 +312,9 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Distribución Mensual",
     "📅 Evolución Anual",
     "🌤 Paneles y Clima",
-    "💶 Impacto",
+    "🌍 Impacto",
     "📄 Tabla de Datos",
-    "ℹ️ Resources/Info",
+    "ℹ️ Info",
     "📖 Manual de Usuario"
 ])
 
@@ -1129,18 +1129,14 @@ with tab4:
         except Exception:
             pass
         
-        # Si falla la API o no encuentra nada, mantenemos Ingolstadt por defecto de seguridad
         return 48.7657, 11.4231, "Ingolstadt"
 
-    # Obtenemos las coordenadas reales de lo que escriba el usuario
     LAT_LOC, LON_LOC, nombre_loc = buscar_coordenadas(busqueda_usuario)
 
     def obtener_info_clima(code, horas_sol=0):
-        # Si por alguna razón code viene en una lista (ej. [3]), extraemos el primer elemento
         if isinstance(code, list):
             code = code[0] if len(code) > 0 else 0
             
-        # Manejo seguro por si es NaN, nulo o un texto extraño
         if pd.isna(code):
             return "⛅ Parcialmente nublado"
 
@@ -1159,12 +1155,12 @@ with tab4:
             return "❄️ Nieve"
         elif code in [95, 96, 99]:
             return "🌩️Tormenta"
-        elif  code in [2, 51, 61] and (horas_sol >= 5.5 and horas_sol < 10.8):
+        elif code in [2, 51, 61] and (horas_sol >= 5.5 and horas_sol < 10.8):
             return "⛅ Parcialmente nublado"
         elif code in [0, 1] or horas_sol >= 10.8:
             return "☀️ Soleado"
         else:
-            return "⛅ Parcialmente nublado" # Cambiado de "Nublado" por defecto a algo más flexible
+            return "⛅ Parcialmente nublado"
 
     if años_sel and meses_sel:
         try:
@@ -1188,23 +1184,21 @@ with tab4:
                         df_w["time"] = pd.to_datetime(df_w["time"])
                         df_w["Fecha"] = df_w["time"].dt.strftime("%Y.%m.%d")
                         df_w["Año"] = df_w["time"].dt.year
-                        df_w["Mes_Num"] = df_w["time"].dt.month  # <- Lo creamos directamente aquí de forma numérica
+                        df_w["Mes_Num"] = df_w["time"].dt.month
                         df_w["Día"] = df_w["time"].dt.day
                         
                         meses_es = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Avr", 5: "Mai", 6: "Jun",
                                     7: "Jul", 8: "Aug", 9: "Sep", 10: "Okt", 11: "Nov", 12: "Dez"}
                         df_w["Mes"] = df_w["Mes_Num"].map(meses_es)
                         
-                        # 1. Primero calculamos las horas de sol
                         df_w["Horas_Sol"] = (df_w["sunshine_duration"].fillna(0) / 3600).round(1) if "sunshine_duration" in df_w else 0
                         df_w["Horas_Nubes"] = (12 - df_w["Horas_Sol"]).clip(lower=0).round(1)
                         
-                        # 2. Evaluamos el texto del clima pasándole las horas de sol reales
                         df_w["Clima_Texto"] = [obtener_info_clima(code, sol) for code, sol in zip(df_w["weathercode"], df_w["Horas_Sol"])]
                         df_w["Icono"] = [
                             "☀️" if "Soleado" in t else 
                             ("⛅" if "Parcial" in t else 
-                            ("☁️" if ("Nublado" in t or "Nubes" in t or "Nubes" in t) else 
+                            ("☁️" if ("Nublado" in t or "Nubes" in t) else 
                             ("🌧️" if ("Lluvia" in t or "Lluvioso" in t) else 
                             ("❄️" if "Nieve" in t else 
                             ("🌩️" if "Tormenta" in t else 
@@ -1219,7 +1213,10 @@ with tab4:
                             "temperature_2m_min": "Temp_Min",
                             "windspeed_10m_max": "Viento"
                         })
-                        return df_w[["Fecha", "Año", "Mes_Num", "Mes", "Día", "Clima_Texto", "Icono", "Temp_Max", "Temp_Min", "Horas_Sol", "Horas_Nubes", "Viento", "Lluvia", "Nieve"]]
+                        
+                        df_w["Temp_Media"] = ((df_w["Temp_Max"] + df_w["Temp_Min"]) / 2).round(2)
+                        
+                        return df_w[["Fecha", "Año", "Mes_Num", "Mes", "Día", "Clima_Texto", "Icono", "Temp_Max", "Temp_Min", "Temp_Media", "Horas_Sol", "Horas_Nubes", "Viento", "Lluvia", "Nieve"]]
                 except Exception:
                     pass
                 return pd.DataFrame()
@@ -1227,8 +1224,8 @@ with tab4:
             df_weather = cargar_clima_localidad(LAT_LOC, LON_LOC, f_inicio, f_fin)
 
             if not df_weather.empty:
-                for col, val in [("Fecha", ""), ("Clima_Texto", "☁️ Nublado"), ("Temp_Max", 0), ("Temp_Min", 0), 
-                                 ("Horas_Sol", 0), ("Horas_Nubes", 0), ("Viento", 0), ("Lluvia", 0), ("Nieve", 0), ("Icono", "☁️️"), ("Mes_Num", 1)]:
+                for col, val in [("Fecha", ""), ("Clima_Texto", "☁️ Nublado"), ("Temp_Max", 0), ("Temp_Min", 0), ("Temp_Media", 0),
+                                 ("Horas_Sol", 0), ("Horas_Nubes", 0), ("Viento", 0), ("Lluvia", 0), ("Nieve", 0), ("Icono", "☁"), ("Mes_Num", 1)]:
                     if col not in df_weather.columns:
                         df_weather[col] = val
 
@@ -1238,14 +1235,8 @@ with tab4:
                     (df_long["Tipo"].isin(["Produced", "Consumed"]))
                 ].copy()
 
-                # Aseguramos que df_energia_total tenga Mes_Num si no lo trae
-                if "Mes_Num" not in df_energia_total.columns and "Mes" in df_energia_total.columns:
-                    # Intentamos mapear o extraer de otra forma si es necesario, o cruzar directamente por Año, Mes, Día
-                    pass
-
                 df_panel_final = pd.merge(df_energia_total, df_weather, on=["Año", "Mes", "Día"], how="left", suffixes=('', '_weather'))
                 
-                # Limpiamos posibles columnas duplicadas de Mes_Num si se solaparan
                 if "Mes_Num_weather" in df_panel_final.columns:
                     df_panel_final["Mes_Num"] = df_panel_final["Mes_Num_weather"].fillna(df_panel_final.get("Mes_Num", 1))
                     df_panel_final.drop(columns=[c for c in ["Mes_Num_weather", "Mes_Num_energia"] if c in df_panel_final.columns], inplace=True, errors='ignore')
@@ -1254,10 +1245,11 @@ with tab4:
                 df_panel_final["Nieve"] = df_panel_final["Nieve"].fillna(0)
                 df_panel_final["Temp_Max"] = df_panel_final["Temp_Max"].fillna(0)
                 df_panel_final["Temp_Min"] = df_panel_final["Temp_Min"].fillna(0)
+                df_panel_final["Temp_Media"] = df_panel_final["Temp_Media"].fillna(0)
                 df_panel_final["Horas_Sol"] = df_panel_final["Horas_Sol"].fillna(0)
                 df_panel_final["Horas_Nubes"] = df_panel_final["Horas_Nubes"].fillna(0)
                 df_panel_final["Viento"] = df_panel_final["Viento"].fillna(0)
-                df_panel_final["Clima_Texto"] = df_panel_final["Clima_Texto"].fillna("☁️️ Nublado")
+                df_panel_final["Clima_Texto"] = df_panel_final["Clima_Texto"].fillna("☁ Nublado")
                 df_panel_final["Icono"] = df_panel_final["Icono"].fillna("☁️")
                 
                 if "Fecha" in df_panel_final.columns:
@@ -1269,13 +1261,12 @@ with tab4:
                 
                 df_panel_final = df_panel_final.sort_values(["Año", "Mes_Num", "Día"])
 
-                dias_unicos_clima = df_panel_final[["Fecha", "Año", "Mes_Num", "Mes", "Día", "Clima_Texto", "Icono", "Temp_Max", "Temp_Min", "Horas_Sol", "Horas_Nubes", "Viento", "Lluvia", "Nieve"]].drop_duplicates().sort_values(["Año", "Mes_Num", "Día"]).reset_index(drop=True)
+                dias_unicos_clima = df_panel_final[["Fecha", "Año", "Mes_Num", "Mes", "Día", "Clima_Texto", "Icono", "Temp_Max", "Temp_Min", "Temp_Media", "Horas_Sol", "Horas_Nubes", "Viento", "Lluvia", "Nieve"]].drop_duplicates().sort_values(["Año", "Mes_Num", "Día"]).reset_index(drop=True)
                 dias_unicos_clima["Secuencia_X"] = dias_unicos_clima.index
 
                 df_panel_final = df_panel_final.merge(dias_unicos_clima[["Año", "Mes_Num", "Mes", "Día", "Secuencia_X"]], on=["Año", "Mes_Num", "Mes", "Día"], how="left", suffixes=('', '_dup'))
                 df_panel_final = df_panel_final.loc[:, ~df_panel_final.columns.str.endswith('_dup')]
 
-                
                 fig_clima = go.Figure()
 
                 df_pivot = df_panel_final.pivot_table(
@@ -1306,7 +1297,7 @@ with tab4:
                         "🟡 Produced: %{customdata[1]:.2f} kWh<br>"
                         "🔵 Consumed: %{customdata[2]:.2f} kWh<br>"
                         "🌧️ Lluvia: %{customdata[3]:.1f} mm | ❄️ Nieve: %{customdata[4]:.1f} cm<br>"
-                        "🌡️️ Máx: %{customdata[5]:.1f} °C | Mín: %{customdata[6]:.1f} °C<extra></extra>"
+                        "🌡 Máx: %{customdata[5]:.1f} °C | Mín: %{customdata[6]:.1f} °C<extra></extra>"
                     )
                 ))
 
@@ -1327,13 +1318,12 @@ with tab4:
                     )
                 ))
 
-                # Lógica personalizada para el paso de los iconos según los meses seleccionados
                 if len(meses_sel) <= 2:
                     paso_iconos = 1
                 elif len(meses_sel) > 5:
                     paso_iconos = 5
                 else:
-                    paso_iconos = 3  # Valor intermedio para cuando selecciones 3, 4 o 5 meses
+                    paso_iconos = 3
                     
                 df_iconos_filtrados = dias_unicos_clima.iloc[::paso_iconos].copy()
                 max_y_val = df_panel_final["Valor"].max() if not df_panel_final["Valor"].empty else 100
@@ -1395,13 +1385,12 @@ with tab4:
                         line_dash="dash",
                         line_color="rgba(0, 0, 0, 0.15)"
                     )
-                # Solo para los días con iconos de tiempo (con punteado 'dot')
                 for idx_icono in df_iconos_filtrados["Secuencia_X"]:
                     fig_clima.add_vline(
                         x=idx_icono,
                         line_width=1,
-                        line_dash="dot",  # Punteado más cerrado y sutil
-                        line_color="rgba(0, 0, 0, 0.10)"  # Color muy ligero para no recargar la gráfica
+                        line_dash="dot",
+                        line_color="rgba(0, 0, 0, 0.10)"
                     )
 
                 st.plotly_chart(fig_clima, use_container_width=True)
@@ -1412,7 +1401,6 @@ with tab4:
                 st.markdown("---")
                 st.subheader("📋 Detalle Meteorológico y Energético Diario")
 
-                # Fusionamos los datos climáticos únicos con el pivote de energía para incluir Produced y Consumed
                 df_tabla_final = pd.merge(
                     dias_unicos_clima[["Fecha", "Secuencia_X", "Clima_Texto", "Temp_Max", "Temp_Min", "Horas_Sol", "Horas_Nubes", "Viento", "Lluvia", "Nieve"]],
                     df_pivot[["Secuencia_X", "Produced", "Consumed"]],
@@ -1420,7 +1408,6 @@ with tab4:
                     how="left"
                 )
 
-                # Seleccionamos y ordenamos las columnas según lo requerido
                 df_tabla_final = df_tabla_final[[
                     "Fecha", "Produced", "Consumed", "Clima_Texto", "Temp_Max", "Temp_Min", 
                     "Horas_Sol", "Horas_Nubes", "Viento", "Lluvia", "Nieve"
@@ -1431,57 +1418,30 @@ with tab4:
                     "Horas de sol", "Horas Nublado", "Viento", "Lluvia", "Nieve"
                 ]
 
-                # Limpiamos valores nulos y redondeamos usando los NUEVOS nombres de columna
                 df_tabla_final["Producción"] = df_tabla_final["Producción"].fillna(0).round(2)
                 df_tabla_final["Consumo"] = df_tabla_final["Consumo"].fillna(0).round(2)
 
-                # Mostramos la tabla utilizando column_config adaptado a los nuevos nombres
                 st.dataframe(
                     df_tabla_final,
                     use_container_width=True,
                     hide_index=True,
                     column_config={
-                        "Fecha": st.column_config.TextColumn(
-                            "Fecha", width="medium"
-                        ),
-                        "Producción": st.column_config.NumberColumn(
-                            "Producción", format="%.2f kWh"
-                        ),
-                        "Consumo": st.column_config.NumberColumn(
-                            "Consumo", format="%.2f kWh"
-                        ),
-                        "Nubosidad": st.column_config.TextColumn(
-                            "Nubosidad", width="medium"
-                        ),
-                        "Temp Max": st.column_config.NumberColumn(
-                            "Temp Max", format="%.1f °C"
-                        ),
-                        "Temp Min": st.column_config.NumberColumn(
-                            "Temp Min", format="%.1f °C"
-                        ),
-                        "Horas de sol": st.column_config.NumberColumn(
-                            "Horas de sol", format="%.1f h"
-                        ),
-                        "Horas Nublado": st.column_config.NumberColumn(
-                            "Horas Nublado", format="%.1f h"
-                        ),
-                        "Viento": st.column_config.NumberColumn(
-                            "Viento", format="%.1f km/h"
-                        ),
-                        "Lluvia": st.column_config.NumberColumn(
-                            "Lluvia", format="%.1f mm"
-                        ),
-                        "Nieve": st.column_config.NumberColumn(
-                            "Nieve", format="%.1f cm"
-                        )
+                        "Fecha": st.column_config.TextColumn("Fecha", width="medium"),
+                        "Producción": st.column_config.NumberColumn("Producción", format="%.2f kWh"),
+                        "Consumo": st.column_config.NumberColumn("Consumo", format="%.2f kWh"),
+                        "Nubosidad": st.column_config.TextColumn("Nubosidad", width="medium"),
+                        "Temp Max": st.column_config.NumberColumn("Temp Max", format="%.1f °C"),
+                        "Temp Min": st.column_config.NumberColumn("Temp Min", format="%.1f °C"),
+                        "Horas de sol": st.column_config.NumberColumn("Horas de sol", format="%.1f h"),
+                        "Horas Nublado": st.column_config.NumberColumn("Horas Nublado", format="%.1f h"),
+                        "Viento": st.column_config.NumberColumn("Viento", format="%.1f km/h"),
+                        "Lluvia": st.column_config.NumberColumn("Lluvia", format="%.1f mm"),
+                        "Nieve": st.column_config.NumberColumn("Nieve", format="%.1f cm")
                     }
                 )
-            else:
-                st.warning("No se pudieron recuperar los datos de Open-Meteo para el rango seleccionado.")
-        
 
             # =========================================================
-            # 🗓️ GRÁFICA DE CALOR ESTACIONAL (CALENDAR HEATMAP)
+            # 🗓️ 1er HEATMAP: CALENDAR HEATMAP DE PRODUCCIÓN SOLAR
             # =========================================================
             st.markdown("---")
             st.subheader("🔥 Heatmap Estacional de Producción Solar")
@@ -1493,6 +1453,13 @@ with tab4:
             ].copy()
 
             if not df_heat_data.empty:
+                df_heat_data["Mes_Num_H"] = df_heat_data["Mes"].map(lambda m: orden_meses.index(m) + 1 if m in orden_meses else 1)
+                df_heat_data["Fecha_Format"] = (
+                    df_heat_data["Día"].astype(str).str.zfill(2) + "." + 
+                    df_heat_data["Mes_Num_H"].astype(str).str.zfill(2) + "." + 
+                    df_heat_data["Año"].astype(str)
+                )
+
                 pivot_heat = df_heat_data.pivot_table(
                     index="Mes",
                     columns="Día",
@@ -1500,37 +1467,107 @@ with tab4:
                     aggfunc="sum"
                 ).reindex(orden_meses)
 
-                fig_cal_heat = px.imshow(
-                    pivot_heat,
-                    labels=dict(x="Día del Mes", y="Mes", color="kWh"),
+                pivot_fechas = df_heat_data.pivot_table(
+                    index="Mes",
+                    columns="Día",
+                    values="Fecha_Format",
+                    aggfunc="first"
+                ).reindex(orden_meses).fillna("")
+
+                fig_cal_heat = go.Figure(go.Heatmap(
+                    z=pivot_heat.values[::-1],
                     x=pivot_heat.columns,
-                    y=pivot_heat.index,
-                    color_continuous_scale="YlOrRd",
-                    aspect="auto"
-                )
+                    y=pivot_heat.index[::-1],
+                    colorscale="YlOrRd",
+                    customdata=pivot_fechas.values[::-1],
+                    hovertemplate="<b>Fecha:</b> %{customdata}<br><b>Producción:</b> %{z:.2f} kWh<extra></extra>"
+                ))
+
                 fig_cal_heat.update_layout(
                     plot_bgcolor="#f4f4f4",
                     paper_bgcolor="#f4f4f4",
                     font_color="#222",
                     height=380,
                     xaxis=dict(title="Día del Mes", dtick=2),
-                    yaxis=dict(title="")
+                    yaxis=dict(title="", autorange="reversed")
                 )
                 st.plotly_chart(fig_cal_heat, use_container_width=True)
 
-            else:
-                st.warning("No se pudieron recuperar los datos de Open-Meteo para el rango seleccionado.")
+            # =========================================================
+            # 🗓️ 2do HEATMAP: NUEVO HEATMAP METEOROLÓGICO (Escalas invertidas)
+            # =========================================================
+            if not df_weather.empty:
+                st.markdown("---")
+                st.subheader("🌡️ Heatmap Meteorológico Estacional")
+                st.markdown("*Matriz de calor interactiva para visualizar las horas de sol o la temperatura media diaria a lo largo del año.*")
+
+                metrica_heat = st.radio(
+                    "Selecciona la métrica a visualizar en el heatmap:",
+                    options=["Horas de luz", "Temperatura media"],
+                    horizontal=True,
+                    key="selector_metrica_heatmap"
+                )
+
+                df_weather["Mes"] = pd.Categorical(df_weather["Mes"], categories=orden_meses, ordered=True)
+                df_weather["Fecha_Format"] = (
+                    df_weather["Día"].astype(str).str.zfill(2) + "." + 
+                    df_weather["Mes_Num"].astype(str).str.zfill(2) + "." + 
+                    df_weather["Año"].astype(str)
+                )
+
+                columna_valor = "Horas_Sol" if metrica_heat == "Horas de luz" else "Temp_Media"
+                unidad_medida = "h" if metrica_heat == "Horas de luz" else "°C"
+                
+                # Ambas escalas invertidas con '_r': valores altos más claros, valores bajos más oscuros
+                if metrica_heat == "Horas de luz":
+                    escala_colores = "YlGnBu_r"
+                else:
+                    escala_colores = "RdBu_r"
+                    
+                pivot_meteo_val = df_weather.pivot_table(
+                    index="Mes",
+                    columns="Día",
+                    values=columna_valor,
+                    aggfunc="mean"
+                ).reindex(orden_meses)
+
+                pivot_meteo_fec = df_weather.pivot_table(
+                    index="Mes",
+                    columns="Día",
+                    values="Fecha_Format",
+                    aggfunc="first"
+                ).reindex(orden_meses).fillna("")
+
+                fig_meteo_heat = go.Figure(go.Heatmap(
+                    z=pivot_meteo_val.values[::-1],
+                    x=pivot_meteo_val.columns,
+                    y=pivot_meteo_val.index[::-1],
+                    colorscale=escala_colores,
+                    customdata=pivot_meteo_fec.values[::-1],
+                    hovertemplate=f"<b>Fecha:</b> %{{customdata}}<br><b>{metrica_heat}:</b> %{{z:.2f}} {unidad_medida}<extra></extra>"
+                ))
+
+                fig_meteo_heat.update_layout(
+                    plot_bgcolor="#f4f4f4",
+                    paper_bgcolor="#f4f4f4",
+                    font_color="#222",
+                    height=380,
+                    xaxis=dict(title="Día del Mes", dtick=2),
+                    yaxis=dict(title="", autorange="reversed")
+                )
+                st.plotly_chart(fig_meteo_heat, use_container_width=True)
+
         except Exception as e:
             st.warning(f"Error al procesar el panel meteorológico: {e}")
     else:
         st.warning("Selecciona al menos un año y un mes para consultar el panel del clima.")
 
-
+        
 # =========================================================
 # 5) 💶 NUEVO TAB: IMPACTO AMBIENTAL & ECONÓMICO
 # =========================================================
 with tab5:
-    st.subheader("💶 Impacto Ambiental y Económico Estimado")
+    st.subheader("🌍 Impacto Ambiental y Económico Estimado")
     st.markdown("*Configura los parámetros económicos y ecológicos mediante los controles deslizantes para calcular el ahorro y la huella de carbono evitada.*")
 
     col_s1, col_s2, col_s3, col_s4 = st.columns(4)
@@ -1553,18 +1590,29 @@ with tab5:
     co2_evitado_ton = co2_evitado_kg / 1000.0
     arboles_equivalentes = int(co2_evitado_kg / 22) if co2_evitado_kg > 0 else 0
 
-    ahorro_autoconsumo = total_pv_used * precio_luz + cuota_fija
+    # Equivalencias de km en transporte (factores aproximados de kg CO2 por pasajero-km)
+    # Coche medio: ~0.17 kg CO2/km | Avión medio: ~0.25 kg CO2/km | Barco Transatlántico: ~0.20 kg CO2/km
+    km_coche = int(co2_evitado_kg / 0.17) if co2_evitado_kg > 0 else 0
+    km_avion = int(co2_evitado_kg / 0.25) if co2_evitado_kg > 0 else 0
+    km_barco = int(co2_evitado_kg / 0.20) if co2_evitado_kg > 0 else 0
+    
+    ahorro_autoconsumo = total_pv_used * precio_luz
     ingresos_excedentes = total_to_netz * precio_excedente
     meses_activos_ratio = len(meses_sel) / 12.0
     cuota_fija_periodo = cuota_fija * meses_activos_ratio
-    ahorro_total_neto = ahorro_autoconsumo + ingresos_excedentes
+    ahorro_total_neto = ahorro_autoconsumo + ingresos_excedentes + cuota_fija_periodo
 
-    st.markdown("### 🌍 Resumen de Impacto Ecológico")
+    st.markdown("### 🌳 Resumen de Impacto Ecológico")
     col_env1, col_env2, col_env3 = st.columns(3)
     with col_env1:
-        st.metric("CO₂ Evitado (Total)", f"{co2_evitado_kg:,.1f} kg".replace(",", "."))
+        texto_km_equivalentes = (
+            f"🚗 Coche: {km_coche:,} km\n\n"
+            f"✈️ Avión: {km_avion:,} km\n\n"
+            f"🚢 Barco: {km_barco:,} km"
+        ).replace(",", ".")
+        st.metric("km equivalentes", texto_km_equivalentes)
     with col_env2:
-        st.metric("CO₂ Evitado (Toneladas)", f"{co2_evitado_ton:,.3f} t".replace(",", "."))
+        st.metric("CO₂ Evitado (Total)", f"{co2_evitado_ton:,.3f} t".replace(",", "."))
     with col_env3:
         st.metric("Equivalente en Árboles", f"{arboles_equivalentes:,} árboles/año".replace(",", "."))
 
@@ -1578,30 +1626,177 @@ with tab5:
     with col_fin3:
         st.metric("Ahorro Bruto Estimado", f"{ahorro_total_neto:,.2f} €".replace(",", "."))
     with col_fin4:
-        st.metric("Cuota Fija (Prorrateada)", f"-{cuota_fija_periodo:,.2f} €".replace(",", "."))
+        st.metric("Cuota Fija (Prorrateada)", f"{cuota_fija_periodo:,.2f} €".replace(",", "."))
 
     st.markdown("---")
-    df_financiero = pd.DataFrame({
-        "Concepto": ["Ahorro Autoconsumo", "Ingresos Excedentes"],
-        "Euros": [ahorro_autoconsumo, ingresos_excedentes]
-    })
+
+    # Construcción de datos para la gráfica de barras apiladas por año
+    datos_financieros_anuales = []
+    for anio in años_disponibles:
+        if anio in años_sel:
+            df_anio_kpi = df_long[
+                (df_long["Año"] == anio) & 
+                (df_long["Mes"].isin(meses_sel)) & 
+                (df_long["Día"] >= rango_dias[0]) & 
+                (df_long["Día"] <= rango_dias[1])
+            ]
+            pv_used_anio = df_anio_kpi[df_anio_kpi["Tipo"] == "PV Used"]["Valor"].sum()
+            to_netz_anio = df_anio_kpi[df_anio_kpi["Tipo"] == "To Netz"]["Valor"].sum()
+            
+            ahorro_ac_anio = pv_used_anio * precio_luz
+            ingresos_ex_anio = to_netz_anio * precio_excedente
+            cuota_fija_anio = cuota_fija * (len(meses_sel) / 12.0)
+        else:
+            ahorro_ac_anio = 0.0
+            ingresos_ex_anio = 0.0
+            cuota_fija_anio = 0.0
+
+        datos_financieros_anuales.append({
+            "Año": str(anio),
+            "Concepto": "Autoconsumo",
+            "Euros": ahorro_ac_anio
+        })
+        datos_financieros_anuales.append({
+            "Año": str(anio),
+            "Concepto": "Cuota Fija",
+            "Euros": cuota_fija_anio
+        })
+        datos_financieros_anuales.append({
+            "Año": str(anio),
+            "Concepto": "Excedente",
+            "Euros": ingresos_ex_anio
+        })
+
+    df_financiero_anual = pd.DataFrame(datos_financieros_anuales)
+
     fig_fin = px.bar(
-        df_financiero,
-        x="Concepto",
+        df_financiero_anual,
+        x="Año",
         y="Euros",
-        text="Euros",
         color="Concepto",
-        color_discrete_sequence=["#00C268", "#3498DB"],
-        title="Desglose del Beneficio Económico en el Periodo Seleccionado"
+        barmode="stack",
+        color_discrete_sequence=["#00C268", "#F39C12", "#3498DB"],
+        title="Desglose del Beneficio Económico por Año (Periodo Seleccionado)",
+        custom_data=["Concepto"]
     )
-    fig_fin.update_traces(texttemplate='%{text:,.2f} €', textposition='outside')
+    
+    # Formato del hover personalizado: Concepto en negrita, valor con dos decimales y sin año
+    fig_fin.update_traces(
+        texttemplate='%{y:,.2f} €', 
+        textposition='inside',
+        hovertemplate="<b>%{customdata[0]}</b><br>%{y:,.2f} €<extra></extra>"
+    )
+    
     fig_fin.update_layout(
         plot_bgcolor="#f4f4f4", paper_bgcolor="#f4f4f4", font_color="#222",
-        height=400, showlegend=False, yaxis=dict(title="Euros (€)")
+        height=450, xaxis=dict(title="Año", type='category'), yaxis=dict(title="Euros (€)")
     )
     st.plotly_chart(fig_fin, use_container_width=True)
 
 
+    # =========================================================
+    # CASHFLOW ACUMULADO Y PREVISIÓN A 10 AÑOS
+    # =========================================================
+    st.markdown("---")
+    st.subheader("📈 Cashflow Acumulado y Previsión a 10 Años")
+    st.markdown("*Análisis financiero evolutivo desde 2022 incluyendo inversión inicial y proyección a futuro.*")
+
+    col_grafica, col_controles = st.columns([0.7, 0.3])
+
+    with col_controles:
+        st.markdown("#### ⚙️ Parámetros Cashflow")
+        inversion_inicial = st.number_input("Inversión Inicial (€)", min_value=0.0, max_value=30000.0, value=8600.0, step=200.0, format="%.2f")
+        precio_luz_futuro = st.slider("Precio Luz Futuro (≥ 2028) (€/kWh)", min_value=0.10, max_value=0.60, value=0.3651, step=0.01, format="%.4f €")
+        cuota_fija_futuro = st.slider("Cuota Fija Futura (≥ 2028) (€/año)", min_value=0.0, max_value=400.0, value=213.60, step=1.0, format="%.2f €")
+
+    # 1. Obtener rendimiento anual base del último año disponible para las proyecciones futuras
+    ultimo_anio_disponible = int(df_long["Año"].max())
+    
+    df_ultimo_anio = df_long[df_long["Año"] == ultimo_anio_disponible]
+    pv_used_base = df_ultimo_anio[df_ultimo_anio["Tipo"] == "PV Used"]["Valor"].sum()
+    to_netz_base = df_ultimo_anio[df_ultimo_anio["Tipo"] == "To Netz"]["Valor"].sum()
+
+    # 2. Rango de años de simulación: desde 2022 (inversión) hasta 10 años después del último disponible
+    anio_fin_prevision = max(2033, ultimo_anio_disponible + 10)
+    anos_cashflow = list(range(2022, anio_fin_prevision + 1))
+
+    cashflow_acumulado = -inversion_inicial
+    datos_cashflow = []
+
+    for anio in anos_cashflow:
+        if anio == 2022:
+            ahorro_ac = 0.0
+            c_fija = 0.0
+            ingresos_ex = 0.0
+        else:
+            if anio <= ultimo_anio_disponible:
+                df_a = df_long[df_long["Año"] == anio]
+                pv_u = df_a[df_a["Tipo"] == "PV Used"]["Valor"].sum()
+                to_n = df_a[df_a["Tipo"] == "To Netz"]["Valor"].sum()
+                p_luz = precio_luz
+                c_fija = cuota_fija
+            else:
+                pv_u = pv_used_base
+                to_n = to_netz_base
+                p_luz = precio_luz_futuro if anio >= 2028 else precio_luz
+                c_fija = cuota_fija_futuro if anio >= 2028 else cuota_fija
+
+            ahorro_ac = pv_u * p_luz
+            ingresos_ex = to_n * precio_excedente
+            ahorro_total_anual = ahorro_ac + c_fija + ingresos_ex
+
+            # Acumulamos sumando el ahorro anual a la inversión inicial / saldo anterior
+            cashflow_acumulado += ahorro_total_anual
+
+        datos_cashflow.append({
+            "Año": str(anio),
+            "Cashflow Acumulado": cashflow_acumulado,
+            "Autoconsumo": ahorro_ac if anio != 2022 else 0.0,
+            "Cuota Fija": c_fija if anio != 2022 else 0.0,
+            "Excedente": ingresos_ex if anio != 2022 else 0.0,
+            "Estado": "Negativo" if cashflow_acumulado < 0 else "Positivo"
+        })
+
+    df_cf = pd.DataFrame(datos_cashflow)
+
+    with col_grafica:
+        fig_cf = px.bar(
+            df_cf,
+            x="Año",
+            y="Cashflow Acumulado",
+            text="Cashflow Acumulado",
+            color="Estado",
+            color_discrete_map={"Negativo": "#E74C3C", "Positivo": "#3498DB"},
+            title="Evolución del Cashflow Acumulado y Previsión a 10 Años (Inv. 2022)",
+            custom_data=["Autoconsumo", "Cuota Fija", "Excedente"]
+        )
+
+        fig_cf.update_traces(
+            texttemplate='%{y:,.2f} €', 
+            textposition='outside',
+            hovertemplate=(
+                "<b>Año: %{x}</b><br>"
+                "Cashflow Acumulado: %{y:,.2f} €<br><br>"
+                "<b>Ahorro del año:</b><br>"
+                "• Autoconsumo: %{customdata[0]:,.2f} €<br>"
+                "• Cuota Fija: %{customdata[1]:,.2f} €<br>"
+                "• Excedente: %{customdata[2]:,.2f} €<extra></extra>"
+            )
+        )
+
+        fig_cf.update_layout(
+            plot_bgcolor="#f4f4f4", 
+            paper_bgcolor="#f4f4f4", 
+            font_color="#222",
+            height=480, 
+            xaxis=dict(title="Año", type='category'), 
+            yaxis=dict(title="Euros Acumulados (€)"),
+            showlegend=False
+        )
+
+        st.plotly_chart(fig_cf, use_container_width=True)
+
+    
 # =========================================================
 # 6) 📄 TABLA DE DATOS
 # =========================================================
@@ -1761,57 +1956,108 @@ with tab7:
 # 8) 📖 MANUAL DE USUARIO
 # =========================================================
 with tab8:
-    st.subheader("📖 Manual de Usuario: Dashboard de Energía Solar")
-    st.markdown("""
-    Este manual proporciona una guía detallada sobre el funcionamiento de los filtros, la interpretación de las métricas clave (KPIs) y el análisis de cada una de las pestañas del panel.
+    st.markdown("## 📖 Manual de Usuario")
+    st.markdown(
+        "Bienvenido al manual de usuario oficial del Dashboard de Energía Solar y Análisis Financiero. "
+        "Esta guía detalla el modelo de datos, la integración meteorológica en tiempo real y explica de forma exhaustiva "
+        "el funcionamiento, controles y gráficas de cada una de las pestañas del sistema."
+    )
+    
+    st.divider()
 
-    ---
+    # --- SECCIÓN 1: FUNDAMENTOS FOTOVOLTAICOS Y ENERGÉTICOS ---
+    st.markdown("### ☀️ ¿Cómo funciona el Análisis Solar y el Cashflow en la App?")
+    
+    col_t1, col_t2 = st.columns([1.2, 1])
+    
+    with col_t1:
+        st.markdown("""
+        * **La Producción y el Autoconsumo:** El sistema procesa registros en formato ancho y largo para correlacionar la energía generada por los paneles fotovoltaicos (`Produced`) frente a la energía consumida (`Consumed`) y exportada a la red (`To Netz`). 
+          * *PV Used:* Representa el autoconsumo directo de la energía limpia generada.
+          * *To Netz:* Excedentes vertidos a la red eléctrica remunerados mediante el precio de compensación.
+        * **¿Qué es el Cashflow Acumulado y la Previsión?:** El modelo financiero evalúa la rentabilidad a largo plazo partiendo de una **Inversión Inicial en 2022** (con valor base ajustable de `-8.600,00 €`). 
+          * A partir de 2023, la aplicación resta año a año el ahorro neto total (autoconsumo + cuota fija del contador + excedentes) a la inversión inicial.
+          * Permite proyectar el flujo de caja hasta 10 años más allá del último registro disponible, aplicando nuevos precios de la luz y cuotas fijas configurables a partir de 2028.
+        """)
+        
+    with col_t2:
+        st.markdown(
+            """
+            <div style="background: #f0f2f6; padding: 15px; border-radius: 8px; border-left: 4px solid #00C268; font-size: 13px; line-height: 1.5;">
+                <b>💡 Clave Financiera y Ecológica:</b><br>
+                El sistema combina la evolución económica con el impacto ambiental cuantificado:
+                <br><br>
+                1. <b>Equivalencia de Transporte:</b> Transforma los kg de CO₂ evitados en kilómetros equivalentes en coche, avión y barco.<br>
+                2. <b>Amortización Progresiva:</b> Muestra visualmente el punto exacto de retorno de inversión mediante barras de saldo negativo (rojo) y positivo (azul).
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-    ### ⚙️ Barra Lateral (Panel de Filtros)
-    Los filtros de la barra lateral controlan el subconjunto de datos que se procesa en todo el dashboard:
-    * **Años:** Permite seleccionar uno o varios años de estudio. Por defecto, el sistema detecta automáticamente el año más reciente con registros.
-    * **Meses:** Permite filtrar por meses específicos (`Jan` a `Dez`). Cuenta con un botón de selección rápida (*Select All / Deselect All*).
-    * **Tipos de dato:** Filtra las categorías energéticas principales:
-      * **Produced:** Energía total generada por los paneles fotovoltaicos.
-      * **Consumed:** Energía total consumida por el hogar o instalación.
-      * **PV Used:** Autoconsumo directo (energía solar utilizada instantáneamente en el hogar).
-      * **To Netz:** Excedentes de energía solar vertidos a la red eléctrica.
-      * **From Netz:** Electricidad importada/comprada de la red eléctrica.
-    * **Rango de días:** Deslizador (*slider*) para acotar el análisis a un periodo de días específico dentro de los meses seleccionados.
-    * **Uploader de Archivos:** Permite cargar un archivo personalizado (`.xlsx`) que cumpla con la estructura requerida (*Wide format*) para analizar tus propios datos.
+    st.divider()
 
-    ---
+    # --- SECCIÓN 2: GUÍA POR PESTAÑAS Y GRÁFICAS ---
+    st.markdown("### 🗂️ Descripción Funcional por Pestañas")
 
-    ### 📊 KPIs Principales
-    En la parte superior del cuerpo principal se muestran tarjetas con indicadores clave de rendimiento:
-    * **Producción Total:** Suma total de energía limpia generada en el periodo.
-    * **Consumo Total:** Energía total demandada por la instalación.
-    * **Autoconsumo:** Cantidad y porcentaje de energía solar aprovechada directamente en el hogar respecto a la producción total.
-    * **Dependencia de la Red:** Energía comprada a la compañía eléctrica y su peso porcentual frente al consumo total.
-    * **Excedente:** Energía sobrante vertida a la red y su porcentaje respecto a la producción.
-    * **Autosuficiencia:** Porcentaje del consumo total cubierto directamente por la instalación solar sin depender de la red externa.
+    tab_m1, tab_m2, tab_m3, tab_m4, tab_m5 = st.tabs([
+        "Tab 1: Evolución Diaria", 
+        "Tab 2: Evolución Mensual", 
+        "Tab 3: Evolución Anual", 
+        "Tab 4: Paneles y Clima",
+        "Tab 5: Impacto y Cashflow"
+    ])
+    
+    with tab_m1:
+        st.markdown("#### 📈 Tab 1 – Evolución Diaria")
+        st.markdown("""
+        * **Propósito:** Exploración detallada de la producción solar, autoconsumo y exportación a escala diaria.
+        * **Componentes principales:**
+          * **Filtros Temporales:** Selectores multianuales, de meses (`Jan` a `Dez`) y rango deslizante de días del mes.
+          * **Tarjetas KPI (Métricas):** Resumen de energía producida, autoconsumida, consumida de la red y vertida.
+          * **Gráfica Diaria:** Línea temporal interactiva que contrasta la generación fotovoltaica con los hábitos de consumo día a día.
+        """)
 
-    ---
+    with tab_m2:
+        st.markdown("#### 📊 Tab 2 – Evolución Mensual")
+        st.markdown("""
+        * **Propósito:** Análisis estacional de la energía generada y consumida agrupada por meses.
+        * **Componentes principales:**
+          * **Gráfica de Barras Mensuales:** Permite evaluar el comportamiento de los paneles a lo largo de las distintas estaciones del año.
+          * **Comparativa de Rendimiento:** Contraste directo entre los volúmenes de autoconsumo y excedentes mes a mes.
+        """)
+        
+    with tab_m3:
+        st.markdown("#### 📈 Tab 3 – Evolución Anual")
+        st.markdown("""
+        * **Propósito:** Evaluar el rendimiento macroscópico de la instalación fotovoltaica a escala plurianual.
+        * **Gráficas y Controles:**
+          * **Comparativa Anual de Métricas:** Barras agrupadas por año para contrastar volúmenes totales de producción y consumo.
+          * **Grado de Autoconsumo y Autarquía:** Indicadores porcentuales clave que miden la eficiencia de aprovechamiento energético de la planta solar frente a la dependencia de la red eléctrica convencional.
+        """)
 
-    ### 📈 Descripción y Análisis por Pestaña
+    with tab_m4:
+        st.markdown("#### 🌤️ Tab 4 – Paneles y Clima")
+        st.markdown("""
+        * **Propósito:** Fusionar el rendimiento energético de los paneles con las condiciones meteorológicas reales e históricas mediante la API de Open-Meteo.
+        * **Características:**
+          * **Buscador de Ubicación Global:** Caja de texto libre para consultar ciudades o códigos postales del mundo (por defecto *Ingolstadt*).
+          * **Gráfica Clima vs Energía:** Curvas de producción/consumo combinadas con iconos meteorológicos (☀️, ⛅, ☁️, 🌧️, ❄️, 🌩️, 🌁) y temperaturas extremas.
+          * **Tabla Detallada Diaria:** Registro tabulado con horas de sol, viento, lluvia y nieve.
+          * **Heatmaps Estacionales:** Dos matrices de calor con Enero arriba y Diciembre abajo:
+            1. *Producción Solar:* Formato de fecha `DD.MM.YYYY` en el hover.
+            2. *Meteorología:* Selector interactivo entre **Horas de luz** (escala `YlGnBu_r`, donde más luz es más claro) y **Temperatura media** (`RdBu_r`, con azules/morados para frío y cálidos para calor).
+        """)
 
-    #### 📈 Tab 1: Evolución Diaria
-    * **Qué muestra:** Gráficas de líneas con la evolución diaria de los tipos seleccionados, una vista de **Evolución Anual Completa (01 Ene — 31 Dic)** en secuencia continua y una tabla resumen de máximos y mínimos anuales.
+    with tab_m5:
+        st.markdown("#### 🌍 Tab 5 – Impacto Ambiental y Económico")
+        st.markdown("""
+        * **Propósito:** Cuantificar el ahorro económico, la reducción de emisiones de CO₂ y proyectar el flujo de caja a largo plazo.
+        * **Componentes:**
+          * **Sliders de Parámetros:** Ajuste de precio de la electricidad, cuota fija del contador, precio de excedentes y factor de CO₂ evitado.
+          * **Resumen Ecológico:** Equivalencias de emisiones en km de transporte (coche, avión, barco) y absorción anual en árboles.
+          * **Resumen Financiero:** Autoconsumo, excedentes y cuota fija prorrateada.
+          * **Cashflow Acumulado y Previsión a 10 Años (Layout 70% / 30%):** Gráfica de barras verticales que arranca en **2022 con la inversión inicial en negativo (rojo)** y acumula los ahorros netos anuales a partir de 2023. Incluye sliders específicos para tarifas futuras (≥ 2028) y hover detallado con el desglose anual por concepto.
+        """)
 
-    #### 🎞️ Tab 2: Distribución Mensual
-    * **Qué muestra:** Una gráfica animada por meses y gráficos de barras apiladas mensuales para desglosar la **Producción** y el **Consumo** frente al autoconsumo y los flujos de red.
-
-    #### 📅 Tab 3: Evolución Anual (Cuadrícula 2x3)
-    * **Qué muestra:** Seis minigráficos organizados en dos filas que contraponen la evolución interanual de cada métrica energética principal en MWh.
-
-    #### 🌤️ Tab 4: Paneles, Clima y Estacionalidad
-    * **Qué muestra:** Correlación entre las curvas de energía y las condiciones meteorológicas reales (temperaturas, horas de sol, viento, lluvia) conectadas a Open-Meteo, acompañada de un **Heatmap Estacional (*Calendar Heatmap*)** para visualizar la generación diaria de energía a lo largo de todo el año.
-
-    #### 💶 Tab 5: Impacto Ambiental & Económico
-    * **Qué muestra:** Métricas de sostenibilidad (huella de carbono evitada en kg/t y su equivalencia en árboles plantados) y un desglose financiero interactivo. Mediante **controles deslizantes (sliders)** puedes configurar en tiempo real el precio bruto de la electricidad de la red, la cuota fija anual, la compensación por excedentes y el factor de conversión de CO₂.
-
-    #### 📄 Tab 6: Tabla de Datos
-    * **Qué muestra:** Matriz cruzada (*wide*) con valores numéricos limpios y ordenables en kWh, celdas vacías para datos nulos y un estilizado sistema de colores pasteles diferenciados para cada uno de los 12 meses.
-
-    ---
-    """)
+    st.divider()
+    st.success("✨ **Consejo de Navegación:** Los ajustes realizados en los controles deslizantes y selectores globales de las pestañas se actualizan en tiempo real gracias al estado de sesión de Streamlit, manteniendo la coherencia financiera y climática en todo el dashboard.")
