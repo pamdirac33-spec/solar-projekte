@@ -1445,7 +1445,7 @@ with tab4:
             # =========================================================
             st.markdown("---")
             st.subheader("🔥 Heatmap Estacional de Producción Solar")
-            st.markdown("*Matriz de calor que representa la generación diaria de energía (kWh) a lo largo del año.*")
+            st.markdown("*Matriz de calor que representa la generación diaria de energía (kWh) a lo largo del año por cada año seleccionado.*")
 
             df_heat_data = df_long[
                 (df_long["Año"].isin(años_sel)) & 
@@ -1460,26 +1460,31 @@ with tab4:
                     df_heat_data["Año"].astype(str)
                 )
 
+                # Creamos una clave combinada Año - Mes y ordenamos los años de más reciente a más antiguo
+                df_heat_data["Año_Mes"] = df_heat_data["Año"].astype(str) + " - " + df_heat_data["Mes"].astype(str)
+                anios_ordenados = sorted(años_sel, reverse=True)
+                index_esperado = [f"{a} - {m}" for a in anios_ordenados for m in orden_meses]
+
                 pivot_heat = df_heat_data.pivot_table(
-                    index="Mes",
+                    index="Año_Mes",
                     columns="Día",
                     values="Valor",
                     aggfunc="sum"
-                ).reindex(orden_meses)
+                ).reindex(index_esperado)
 
                 pivot_fechas = df_heat_data.pivot_table(
-                    index="Mes",
+                    index="Año_Mes",
                     columns="Día",
                     values="Fecha_Format",
                     aggfunc="first"
-                ).reindex(orden_meses).fillna("")
+                ).reindex(index_esperado).fillna("")
 
                 fig_cal_heat = go.Figure(go.Heatmap(
-                    z=pivot_heat.values[::-1],
+                    z=pivot_heat.values,
                     x=pivot_heat.columns,
-                    y=pivot_heat.index[::-1],
+                    y=pivot_heat.index,
                     colorscale="YlOrRd",
-                    customdata=pivot_fechas.values[::-1],
+                    customdata=pivot_fechas.values,
                     hovertemplate="<b>Fecha:</b> %{customdata}<br><b>Producción:</b> %{z:.2f} kWh<extra></extra>"
                 ))
 
@@ -1487,7 +1492,7 @@ with tab4:
                     plot_bgcolor="#f4f4f4",
                     paper_bgcolor="#f4f4f4",
                     font_color="#222",
-                    height=380,
+                    height=max(380, len(index_esperado) * 22),
                     xaxis=dict(title="Día del Mes", dtick=2),
                     yaxis=dict(title="", autorange="reversed")
                 )
@@ -1499,7 +1504,7 @@ with tab4:
             if not df_weather.empty:
                 st.markdown("---")
                 st.subheader("🌡️ Heatmap Meteorológico Estacional")
-                st.markdown("*Matriz de calor interactiva para visualizar las horas de sol o la temperatura media diaria a lo largo del año.*")
+                st.markdown("*Matriz de calor interactiva para visualizar las horas de sol o la temperatura media diaria desglosada por años.*")
 
                 metrica_heat = st.radio(
                     "Selecciona la métrica a visualizar en el heatmap:",
@@ -1515,35 +1520,38 @@ with tab4:
                     df_weather["Año"].astype(str)
                 )
 
+                df_weather["Año_Mes"] = df_weather["Año"].astype(str) + " - " + df_weather["Mes"].astype(str)
+                anios_ordenados = sorted(años_sel, reverse=True)
+                index_esperado = [f"{a} - {m}" for a in anios_ordenados for m in orden_meses]
+
                 columna_valor = "Horas_Sol" if metrica_heat == "Horas de luz" else "Temp_Media"
                 unidad_medida = "h" if metrica_heat == "Horas de luz" else "°C"
                 
-                # Ambas escalas invertidas con '_r': valores altos más claros, valores bajos más oscuros
                 if metrica_heat == "Horas de luz":
                     escala_colores = "YlGnBu_r"
                 else:
                     escala_colores = "RdBu_r"
                     
                 pivot_meteo_val = df_weather.pivot_table(
-                    index="Mes",
+                    index="Año_Mes",
                     columns="Día",
                     values=columna_valor,
                     aggfunc="mean"
-                ).reindex(orden_meses)
+                ).reindex(index_esperado)
 
                 pivot_meteo_fec = df_weather.pivot_table(
-                    index="Mes",
+                    index="Año_Mes",
                     columns="Día",
                     values="Fecha_Format",
                     aggfunc="first"
-                ).reindex(orden_meses).fillna("")
+                ).reindex(index_esperado).fillna("")
 
                 fig_meteo_heat = go.Figure(go.Heatmap(
-                    z=pivot_meteo_val.values[::-1],
+                    z=pivot_meteo_val.values,
                     x=pivot_meteo_val.columns,
-                    y=pivot_meteo_val.index[::-1],
+                    y=pivot_meteo_val.index,
                     colorscale=escala_colores,
-                    customdata=pivot_meteo_fec.values[::-1],
+                    customdata=pivot_meteo_fec.values,
                     hovertemplate=f"<b>Fecha:</b> %{{customdata}}<br><b>{metrica_heat}:</b> %{{z:.2f}} {unidad_medida}<extra></extra>"
                 ))
 
@@ -1551,7 +1559,7 @@ with tab4:
                     plot_bgcolor="#f4f4f4",
                     paper_bgcolor="#f4f4f4",
                     font_color="#222",
-                    height=380,
+                    height=max(380, len(index_esperado) * 22),
                     xaxis=dict(title="Día del Mes", dtick=2),
                     yaxis=dict(title="", autorange="reversed")
                 )
@@ -1604,17 +1612,44 @@ with tab5:
 
     st.markdown("### 🌳 Resumen de Impacto Ecológico")
     col_env1, col_env2, col_env3 = st.columns(3)
+    
     with col_env1:
         texto_km_equivalentes = (
-            f"🚗 Coche: {km_coche:,} km\n\n"
-            f"✈️ Avión: {km_avion:,} km\n\n"
+            f"🚗 Coche: {km_coche:,} km<br>"
+            f"✈️ Avión: {km_avion:,} km<br>"
             f"🚢 Barco: {km_barco:,} km"
         ).replace(",", ".")
-        st.metric("km equivalentes", texto_km_equivalentes)
+        st.markdown(
+            f"""
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px;">
+                <div style="font-size: 0.85rem !important; font-weight: 700 !important; margin-bottom: 4px;"><b>km equivalentes</b></div>
+                <div style="font-size: 0.9rem !important; font-weight: 400 !important; line-height: 1.5;">{texto_km_equivalentes}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
     with col_env2:
-        st.metric("CO₂ Evitado (Total)", f"{co2_evitado_ton:,.3f} t".replace(",", "."))
+        st.markdown(
+            f"""
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px;">
+                <div style="font-size: 0.85rem !important; font-weight: 700 !important; margin-bottom: 4px;"><b>CO₂ Evitado (Total)</b></div>
+                <div style="font-size: 0.9rem !important; font-weight: 400 !important; line-height: 1.5;">{f"{co2_evitado_ton:,.3f} t".replace(",", ".")}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
     with col_env3:
-        st.metric("Equivalente en Árboles", f"{arboles_equivalentes:,} árboles/año".replace(",", "."))
+        st.markdown(
+            f"""
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px;">
+                <div style="font-size: 0.85rem !important; font-weight: 700 !important; margin-bottom: 4px;"><b>Equivalente en Árboles</b></div>
+                <div style="font-size: 0.9rem !important; font-weight: 400 !important; line-height: 1.5;">{f"{arboles_equivalentes:,} árboles/año".replace(",", ".")}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     st.markdown("---")
     st.markdown("### 💰 Resumen Financiero y Ahorro Estimado")
@@ -1731,11 +1766,28 @@ with tab5:
         else:
             if anio <= ultimo_anio_disponible:
                 df_a = df_long[df_long["Año"] == anio]
-                pv_u = df_a[df_a["Tipo"] == "PV Used"]["Valor"].sum()
-                to_n = df_a[df_a["Tipo"] == "To Netz"]["Valor"].sum()
+                
+                # --- EXTRAPOLACIÓN AUTOMÁTICA DE MESES FALTANTES ---
+                meses_presentes = set(df_a["Mes"].unique()) if not df_a.empty else set()
+                meses_faltantes = [m for m in orden_meses if m not in meses_presentes]
+                
+                if meses_faltantes and anio > min(anos_cashflow):
+                    # Si faltan meses, buscamos los datos del año anterior para esos mismos meses
+                    df_anterior = df_long[df_long["Año"] == (anio - 1)]
+                    df_faltantes = df_anterior[df_anterior["Mes"].isin(meses_faltantes)]
+                    
+                    # Sumamos lo real del año actual + lo extrapolado del año anterior
+                    pv_u = df_a[df_a["Tipo"] == "PV Used"]["Valor"].sum() + df_faltantes[df_faltantes["Tipo"] == "PV Used"]["Valor"].sum()
+                    to_n = df_a[df_a["Tipo"] == "To Netz"]["Valor"].sum() + df_faltantes[df_faltantes["Tipo"] == "To Netz"]["Valor"].sum()
+                else:
+                    # Si el año está completo, usamos sus datos reales directamente
+                    pv_u = df_a[df_a["Tipo"] == "PV Used"]["Valor"].sum()
+                    to_n = df_a[df_a["Tipo"] == "To Netz"]["Valor"].sum()
+                
                 p_luz = precio_luz
                 c_fija = cuota_fija
             else:
+                # Años futuros (proyecciones a 10 años)
                 pv_u = pv_used_base
                 to_n = to_netz_base
                 p_luz = precio_luz_futuro if anio >= 2028 else precio_luz
@@ -1745,7 +1797,7 @@ with tab5:
             ingresos_ex = to_n * precio_excedente
             ahorro_total_anual = ahorro_ac + c_fija + ingresos_ex
 
-            # Acumulamos sumando el ahorro anual a la inversión inicial / saldo anterior
+            # Acumulamos sumando el ahorro anual al saldo anterior
             cashflow_acumulado += ahorro_total_anual
 
         datos_cashflow.append({
@@ -1791,7 +1843,10 @@ with tab5:
             height=480, 
             xaxis=dict(title="Año", type='category'), 
             yaxis=dict(title="Euros Acumulados (€)"),
-            showlegend=False
+            showlegend=False,
+            hoverlabel=dict(
+                align="left"  # 👈 Esto fuerza globalmente que el texto del hover esté alineado a la izquierda en todas las barras
+            )
         )
 
         st.plotly_chart(fig_cf, use_container_width=True)
