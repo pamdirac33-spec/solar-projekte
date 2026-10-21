@@ -2101,6 +2101,12 @@ with tab8:
           * **Heatmaps Estacionales:** Dos matrices de calor con Enero arriba y Diciembre abajo:
             1. *Producción Solar:* Formato de fecha `DD.MM.YYYY` en el hover.
             2. *Meteorología:* Selector interactivo entre **Horas de luz** (escala `YlGnBu_r`, donde más luz es más claro) y **Temperatura media** (`RdBu_r`, con azules/morados para frío y cálidos para calor).
+
+        * **Heatmaps Meteorológicos Estacionales (NUEVO):** 
+          * **Matriz de Calor de Producción Solar:** Representa en formato de calendario estacional (con los meses ordenados de Enero a Diciembre y los años en orden descendente) la generación diaria de energía en kWh. Al pasar el cursor (*hover*), muestra la fecha exacta en formato `DD.MM.YYYY` y el valor de producción.
+          * **Matriz de Calor Meteorológica:** Permite alternar mediante un selector entre dos métricas clave:
+            1. *Horas de luz:* Visualiza la duración de la insolación diaria utilizando una escala de colores optimizada (`YlGnBu_r`).
+            2. *Temperatura media:* Muestra la temperatura media diaria registrada (`Temp_Media`) utilizando una escala térmica divergente (`RdBu_r`, donde los tonos fríos representan bajas temperaturas y los cálidos el calor estival).
         """)
 
     with tab_m5:
