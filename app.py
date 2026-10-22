@@ -61,7 +61,7 @@ st.markdown("""
 st.markdown(
     """
     <div class="big-title">☀️ Dashboard: Energía Solar & Paneles Fotovoltaicos</div>
-    <div class="sub-title" style="margin-left: 10%;"><i>Análisis detallado de producción, consumo y flujos de red [05.10.2026]</i></div>
+    <div class="sub-title" style="margin-left: 6%;"><i>Análisis detallado de producción, consumo y flujos de red [05.10.2026]</i></div>
     """,
     unsafe_allow_html=True,
 )
@@ -565,6 +565,8 @@ with tab1:
         else:
             st.info("No hay suficientes datos para generar la tabla resumen.")
 
+    st.markdown("---")
+
 # =========================================================
 # 2) 📊 EVOLUCIÓN / DISTRIBUCIÓN MENSUAL 
 # =========================================================
@@ -959,6 +961,7 @@ with tab2:
 
     st.plotly_chart(fig_con, use_container_width=True)
 
+    st.markdown("---")
     
 # =========================================================
 # 3) 📅 VISTA ANUAL (Cuadrícula 2x3)
@@ -1036,7 +1039,8 @@ with tab3:
                 showlegend=False,
                 hovermode="closest",
                 xaxis=dict(tickmode="array", tickvals=x_numeric, ticktext=x_labels, showgrid=False, zeroline=False),
-                yaxis=dict(title="MWh", showgrid=True, gridcolor="rgba(0,0,0,0.15)", zeroline=False)
+                yaxis=dict(title="MWh", showgrid=True, gridcolor="rgba(0,0,0,0.15)", zeroline=False),
+                hoverlabel=dict(align="left")  # 👈 FUERZA EL TEXTO ALINEADO A LA IZQUIERDA
             )
 
             st.plotly_chart(fig, use_container_width=True, key=f"anual_f1_{t}")
@@ -1086,12 +1090,14 @@ with tab3:
                 showlegend=False,
                 hovermode="closest",
                 xaxis=dict(tickmode="array", tickvals=x_numeric, ticktext=x_labels, showgrid=False, zeroline=False),
-                yaxis=dict(title="MWh", showgrid=True, gridcolor="rgba(0,0,0,0.15)", zeroline=False)
+                yaxis=dict(title="MWh", showgrid=True, gridcolor="rgba(0,0,0,0.15)", zeroline=False),
+                hoverlabel=dict(align="left")  # 👈 FUERZA EL TEXTO ALINEADO A LA IZQUIERDA
             )
 
             st.plotly_chart(fig, use_container_width=True, key=f"anual_f2_{t}")
 
-
+    st.markdown("---")
+    
 # =========================================================
 # 4) 🌤️ PANEL DE CLIMA E HISTÓRICO EN INGOLSTADT
 # =========================================================
@@ -1441,15 +1447,26 @@ with tab4:
                 )
 
             # =========================================================
-            # 🗓️ 1er HEATMAP: CALENDAR HEATMAP DE PRODUCCIÓN SOLAR
+            # 🗓️ 1er HEATMAP: CALENDAR HEATMAP ESTACIONAL (Producción / Consumo)
             # =========================================================
             st.markdown("---")
-            st.subheader("🔥 Heatmap Estacional de Producción Solar")
-            st.markdown("*Matriz de calor que representa la generación diaria de energía (kWh) a lo largo del año por cada año seleccionado.*")
+            st.subheader("🔥 Heatmap Estacional Energético")
+            st.markdown("*Matriz de calor que representa la generación o consumo diario de energía (kWh) a lo largo del año por cada año seleccionado.*")
+
+            tipo_heat_sel = st.radio(
+                "Selecciona la métrica energética para el heatmap:",
+                options=["Producción", "Consumo"],
+                horizontal=True,
+                key="selector_tipo_heatmap_solar"
+            )
+
+            # Mapeamos la opción del radio button al tipo interno del DataFrame
+            tipo_interno = "Produced" if tipo_heat_sel == "Producción" else "Consumed"
+            color_escala = "YlOrRd" if tipo_interno == "Produced" else "Blues"
 
             df_heat_data = df_long[
                 (df_long["Año"].isin(años_sel)) & 
-                (df_long["Tipo"] == "Produced")
+                (df_long["Tipo"] == tipo_interno)
             ].copy()
 
             if not df_heat_data.empty:
@@ -1483,9 +1500,10 @@ with tab4:
                     z=pivot_heat.values,
                     x=pivot_heat.columns,
                     y=pivot_heat.index,
-                    colorscale="YlOrRd",
+                    colorscale=color_escala,
                     customdata=pivot_fechas.values,
-                    hovertemplate="<b>Fecha:</b> %{customdata}<br><b>Producción:</b> %{z:.2f} kWh<extra></extra>"
+                    hovertemplate=f"<b>Fecha:</b> %{{customdata}}<br><b>{tipo_heat_sel}:</b> %{{z:.2f}} kWh<extra></extra>",
+                    colorbar=dict(title=dict(text="kWh"))
                 ))
 
                 fig_cal_heat.update_layout(
@@ -1497,18 +1515,21 @@ with tab4:
                     yaxis=dict(title="", autorange="reversed")
                 )
                 st.plotly_chart(fig_cal_heat, use_container_width=True)
+            else:
+                st.warning("No hay datos disponibles para la métrica y período seleccionados.")
+                
 
             # =========================================================
-            # 🗓️ 2do HEATMAP: NUEVO HEATMAP METEOROLÓGICO (Escalas invertidas)
+            # 🗓️ 2do HEATMAP: NUEVO HEATMAP METEOROLÓGICO (Actualizado con 4 métricas)
             # =========================================================
             if not df_weather.empty:
                 st.markdown("---")
                 st.subheader("🌡️ Heatmap Meteorológico Estacional")
-                st.markdown("*Matriz de calor interactiva para visualizar las horas de sol o la temperatura media diaria desglosada por años.*")
+                st.markdown("*Matriz de calor interactiva para visualizar las horas de sol, temperaturas extremas o precipitaciones diarias desglosada por años.*")
 
                 metrica_heat = st.radio(
                     "Selecciona la métrica a visualizar en el heatmap:",
-                    options=["Horas de luz", "Temperatura media"],
+                    options=["Horas de luz", "Temp Max", "Temp Min", "Precipitaciones"],
                     horizontal=True,
                     key="selector_metrica_heatmap"
                 )
@@ -1524,13 +1545,23 @@ with tab4:
                 anios_ordenados = sorted(años_sel, reverse=True)
                 index_esperado = [f"{a} - {m}" for a in anios_ordenados for m in orden_meses]
 
-                columna_valor = "Horas_Sol" if metrica_heat == "Horas de luz" else "Temp_Media"
-                unidad_medida = "h" if metrica_heat == "Horas de luz" else "°C"
-                
+                # Asignamos columna, unidad y paleta según la opción elegida en el radio button
                 if metrica_heat == "Horas de luz":
+                    columna_valor = "Horas_Sol"
+                    unidad_medida = "h"
                     escala_colores = "YlGnBu_r"
-                else:
+                elif metrica_heat == "Temperatura Max":
+                    columna_valor = "Temp_Max"
+                    unidad_medida = "°C"
                     escala_colores = "RdBu_r"
+                elif metrica_heat == "Temp Min":
+                    columna_valor = "Temp_Min"
+                    unidad_medida = "°C"
+                    escala_colores = "RdBu_r"
+                else:  # Precipitaciones
+                    columna_valor = "Lluvia"
+                    unidad_medida = "mm"
+                    escala_colores = "Blues"
                     
                 pivot_meteo_val = df_weather.pivot_table(
                     index="Año_Mes",
@@ -1552,7 +1583,8 @@ with tab4:
                     y=pivot_meteo_val.index,
                     colorscale=escala_colores,
                     customdata=pivot_meteo_fec.values,
-                    hovertemplate=f"<b>Fecha:</b> %{{customdata}}<br><b>{metrica_heat}:</b> %{{z:.2f}} {unidad_medida}<extra></extra>"
+                    hovertemplate=f"<b>Fecha:</b> %{{customdata}}<br><b>{metrica_heat}:</b> %{{z:.1f}} {unidad_medida}<extra></extra>", # 👈 Cambiado a .1f
+                    colorbar=dict(title=dict(text=unidad_medida))
                 ))
 
                 fig_meteo_heat.update_layout(
@@ -1570,7 +1602,8 @@ with tab4:
     else:
         st.warning("Selecciona al menos un año y un mes para consultar el panel del clima.")
 
-        
+    st.markdown("---")
+    
 # =========================================================
 # 5) 💶 NUEVO TAB: IMPACTO AMBIENTAL & ECONÓMICO
 # =========================================================
@@ -1607,34 +1640,31 @@ with tab5:
     ahorro_autoconsumo = total_pv_used * precio_luz
     ingresos_excedentes = total_to_netz * precio_excedente
     meses_activos_ratio = len(meses_sel) / 12.0
-    cuota_fija_periodo = cuota_fija * meses_activos_ratio
+    num_anios_seleccionados = len(años_sel) if len(años_sel) > 0 else 1
+    cuota_fija_periodo = cuota_fija * num_anios_seleccionados
     ahorro_total_neto = ahorro_autoconsumo + ingresos_excedentes + cuota_fija_periodo
 
     st.markdown("### 🌳 Resumen de Impacto Ecológico")
-    col_env1, col_env2, col_env3 = st.columns(3)
-    
+    # Ampliamos a 5 columnas para que cada indicador tenga su propia caja individual en la misma fila
+    col_env1, col_env2, col_env3, col_env4, col_env5 = st.columns(5)
+        
     with col_env1:
-        texto_km_equivalentes = (
-            f"🚗 Coche: {km_coche:,} km<br>"
-            f"✈️ Avión: {km_avion:,} km<br>"
-            f"🚢 Barco: {km_barco:,} km"
-        ).replace(",", ".")
         st.markdown(
             f"""
-            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px;">
-                <div style="font-size: 0.85rem !important; font-weight: 700 !important; margin-bottom: 4px;"><b>km equivalentes</b></div>
-                <div style="font-size: 0.9rem !important; font-weight: 400 !important; line-height: 1.5;">{texto_km_equivalentes}</div>
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span style="font-size: 0.8rem !important; font-weight: 700 !important;"><b>🚗 Coche</b>:</span>
+                <span style="font-size: 0.85rem !important; font-weight: 400 !important;">{f"{km_coche:,}".replace(",", ".")} km</span>
             </div>
             """,
             unsafe_allow_html=True
         )
-        
+
     with col_env2:
         st.markdown(
             f"""
-            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px;">
-                <div style="font-size: 0.85rem !important; font-weight: 700 !important; margin-bottom: 4px;"><b>CO₂ Evitado (Total)</b></div>
-                <div style="font-size: 0.9rem !important; font-weight: 400 !important; line-height: 1.5;">{f"{co2_evitado_ton:,.3f} t".replace(",", ".")}</div>
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span style="font-size: 0.8rem !important; font-weight: 700 !important;"><b>✈️ Avión</b>:</span>
+                <span style="font-size: 0.85rem !important; font-weight: 400 !important;">{f"{km_avion:,}".replace(",", ".")} km</span>
             </div>
             """,
             unsafe_allow_html=True
@@ -1643,9 +1673,31 @@ with tab5:
     with col_env3:
         st.markdown(
             f"""
-            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px;">
-                <div style="font-size: 0.85rem !important; font-weight: 700 !important; margin-bottom: 4px;"><b>Equivalente en Árboles</b></div>
-                <div style="font-size: 0.9rem !important; font-weight: 400 !important; line-height: 1.5;">{f"{arboles_equivalentes:,} árboles/año".replace(",", ".")}</div>
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span style="font-size: 0.8rem !important; font-weight: 700 !important;"><b>🚢 Barco</b>:</span>
+                <span style="font-size: 0.85rem !important; font-weight: 400 !important;">{f"{km_barco:,}".replace(",", ".")} km</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+    with col_env4:
+        st.markdown(
+            f"""
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span style="font-size: 0.8rem !important; font-weight: 700 !important;"><b>CO₂</b>:</span>
+                <span style="font-size: 0.85rem !important; font-weight: 400 !important;">{f"{co2_evitado_ton:,.3f} t".replace(",", ".")}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with col_env5:
+        st.markdown(
+            f"""
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span style="font-size: 0.8rem !important; font-weight: 700 !important;"><b>Árboles</b>:</span>
+                <span style="font-size: 0.85rem !important; font-weight: 400 !important;">{f"{arboles_equivalentes:,} árboles".replace(",", ".")}</span>
             </div>
             """,
             unsafe_allow_html=True
@@ -1654,14 +1706,50 @@ with tab5:
     st.markdown("---")
     st.markdown("### 💰 Resumen Financiero y Ahorro Estimado")
     col_fin1, col_fin2, col_fin3, col_fin4 = st.columns(4)
+    
     with col_fin1:
-        st.metric("Ahorro por Autoconsumo", f"{ahorro_autoconsumo:,.2f} €".replace(",", "."))
+        st.markdown(
+            f"""
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span style="font-size: 0.8rem !important; font-weight: 700 !important;"><b>Autoconsumo</b>:</span>
+                <span style="font-size: 0.85rem !important; font-weight: 400 !important;">{f"{ahorro_autoconsumo:,.2f} €".replace(",", ".")}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
     with col_fin2:
-        st.metric("Ingresos por Excedentes", f"{ingresos_excedentes:,.2f} €".replace(",", "."))
+        st.markdown(
+            f"""
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span style="font-size: 0.8rem !important; font-weight: 700 !important;"><b>Excedentes</b>:</span>
+                <span style="font-size: 0.85rem !important; font-weight: 400 !important;">{f"{ingresos_excedentes:,.2f} €".replace(",", ".")}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
     with col_fin3:
-        st.metric("Ahorro Bruto Estimado", f"{ahorro_total_neto:,.2f} €".replace(",", "."))
+        st.markdown(
+            f"""
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span style="font-size: 0.8rem !important; font-weight: 700 !important;"><b>Cuota Fija</b>:</span>
+                <span style="font-size: 0.85rem !important; font-weight: 400 !important;">{f"{cuota_fija_periodo:,.2f} €".replace(",", ".")}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
     with col_fin4:
-        st.metric("Cuota Fija (Prorrateada)", f"{cuota_fija_periodo:,.2f} €".replace(",", "."))
+        st.markdown(
+            f"""
+            <div style="background-color: rgba(128, 128, 128, 0.05); padding: 8px 12px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span style="font-size: 0.8rem !important; font-weight: 700 !important;"><b>Ahorro Total</b>:</span>
+                <span style="font-size: 0.85rem !important; font-weight: 400 !important;">{f"{ahorro_total_neto:,.2f} €".replace(",", ".")}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     st.markdown("---")
 
@@ -1851,6 +1939,7 @@ with tab5:
 
         st.plotly_chart(fig_cf, use_container_width=True)
 
+    st.markdown("---")
     
 # =========================================================
 # 6) 📄 TABLA DE DATOS
@@ -2102,7 +2191,7 @@ with tab8:
             1. *Producción Solar:* Formato de fecha `DD.MM.YYYY` en el hover.
             2. *Meteorología:* Selector interactivo entre **Horas de luz** (escala `YlGnBu_r`, donde más luz es más claro) y **Temperatura media** (`RdBu_r`, con azules/morados para frío y cálidos para calor).
 
-        * **Heatmaps Meteorológicos Estacionales (NUEVO):** 
+        * **Heatmaps Meteorológicos Estacionales:** 
           * **Matriz de Calor de Producción Solar:** Representa en formato de calendario estacional (con los meses ordenados de Enero a Diciembre y los años en orden descendente) la generación diaria de energía en kWh. Al pasar el cursor (*hover*), muestra la fecha exacta en formato `DD.MM.YYYY` y el valor de producción.
           * **Matriz de Calor Meteorológica:** Permite alternar mediante un selector entre dos métricas clave:
             1. *Horas de luz:* Visualiza la duración de la insolación diaria utilizando una escala de colores optimizada (`YlGnBu_r`).
