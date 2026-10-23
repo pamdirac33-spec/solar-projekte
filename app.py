@@ -1550,7 +1550,7 @@ with tab4:
                     columna_valor = "Horas_Sol"
                     unidad_medida = "h"
                     escala_colores = "YlGnBu_r"
-                elif metrica_heat == "Temperatura Max":
+                elif metrica_heat == "Temp Max":
                     columna_valor = "Temp_Max"
                     unidad_medida = "°C"
                     escala_colores = "RdBu_r"
