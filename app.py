@@ -311,7 +311,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📈 Evolución Diaria",
     "📊 Distribución Mensual",
     "📅 Evolución Anual",
-    "🌤 Paneles y Clima",
+    "🌈 Paneles y Clima",
     "🌍 Impacto",
     "📄 Tabla de Datos",
     "ℹ️ Info",
@@ -366,7 +366,7 @@ with tab1:
         paper_bgcolor="#f4f4f4",
         font_color="#222",
         legend_title_text="Año - Mes - Tipo",
-        margin=dict(l=40, r=150, t=60, b=40),
+        margin=dict(l=40, r=40, t=60, b=40),
         height=550,
         yaxis_title="kWh",
         xaxis=dict(
@@ -398,7 +398,7 @@ with tab1:
     # NUEVA GRÁFICA: EVOLUCIÓN ANUAL COMPLETA (Línea Continua Ene - Dic)
     # ---------------------------------------------------------
     st.markdown("---")
-    st.subheader("📅 Evolución Anual Completa (01 Ene — 31 Dic)")
+    st.subheader("📅 Evolución Anual Completa (Ene — Dic)")
 
     df_anual_completo = df_long[
         (df_long["Año"].isin(años_sel)) &
@@ -415,9 +415,9 @@ with tab1:
         df_anual_completo["Mes_Num"] = df_anual_completo["Mes"].map(lambda m: orden_meses.index(m) + 1)
         df_anual_completo = df_anual_completo.sort_values(["Año", "Mes_Num", "Día"])
 
-        # 3. SECUENCIA COMPARTIDA: Asignamos un índice único por cada combinación de Mes y Día para que todos los tipos compartan la misma X
+        # 3. SECUENCIA UNIFORME: Creamos una etiqueta única por día (ej. "Jan-01") y convertimos a string para las categorías
         dias_unicos = df_anual_completo[["Mes_Num", "Mes", "Día"]].drop_duplicates().sort_values(["Mes_Num", "Día"]).reset_index(drop=True)
-        dias_unicos["Secuencia_X"] = dias_unicos.index
+        dias_unicos["Secuencia_X"] = dias_unicos.index.astype(str)  # 👈 Convertido a string para type="category"
 
         # Mapeamos esa secuencia al DataFrame principal
         df_anual_completo = df_anual_completo.merge(dias_unicos, on=["Mes_Num", "Mes", "Día"], how="left")
@@ -438,21 +438,21 @@ with tab1:
             markers=False,
             color_discrete_sequence=px.colors.qualitative.Set1,
             render_mode="svg",
-            custom_data=["Fecha_Anual", "Tipo"]  # Usamos la fecha formateada en custom_data
+            custom_data=["Fecha_Anual", "Tipo"]
         )
 
         fig_anual.update_traces(
             hovertemplate="<b>%{customdata[0]}</b><br><b>%{customdata[1]}:</b> %{y:.2f} kWh<extra></extra>"
         )
 
-        # 4. Calcular posiciones para las líneas divisorias de meses y las marcas del eje X (solo días 1 y 15) usando la secuencia unificada
+        # 4. Calcular posiciones para las líneas divisorias de meses y marcas del eje X (días 1 y 15)
         tickvals = []
         ticktext = []
         meses_cambio_indices = []
         meses_procesados_lineas = set()
 
         for (mes_num, mes), grupo in dias_unicos.groupby(["Mes_Num", "Mes"], sort=False):
-            primer_indice = grupo["Secuencia_X"].min()  # <--- Corregido (primer_indice sin s)
+            primer_indice = grupo["Secuencia_X"].iloc[0]  # Usamos iloc[0] por ser string
             
             if mes not in meses_procesados_lineas:
                 meses_cambio_indices.append(primer_indice)
@@ -473,7 +473,17 @@ with tab1:
             font_color="#222",
             height=500,
             margin=dict(l=40, r=40, t=60, b=40),
-            showlegend=False,
+            showlegend=True,  #
+            legend=dict(
+                x=0.88,       # Posición horizontal (0 = izquierda, 1 = derecha)
+                y=0.98,       # Posición vertical (0 = abajo, 1 = arriba)
+                xanchor="left",
+                yanchor="top",
+                bgcolor="rgba(244, 244, 244, 0.8)",  # Fondo semitransparente para que no tape del todo las líneas
+                bordercolor="rgba(0, 0, 0, 0.2)",
+                borderwidth=1,
+                font=dict(size=11)
+            ),
             xaxis=dict(
                 title="Fecha",
                 tickmode="array",
@@ -486,7 +496,8 @@ with tab1:
                 showline=True,
                 linewidth=1.5,
                 linecolor="black",
-                mirror=False
+                mirror=False,
+                type="category"  # 👈 Clave para que cada día tenga exactamente el mismo espacio visual
             ),
             yaxis=dict(
                 title="kWh",
@@ -501,7 +512,7 @@ with tab1:
             hovermode="x unified"
         )
 
-        # Añadir líneas verticales divisorias para cada inicio de mes en el grid
+        # Añadir líneas verticales divisorias para cada inicio de mes
         for idx_mes in meses_cambio_indices:
             fig_anual.add_vline(
                 x=idx_mes,
@@ -1450,8 +1461,6 @@ with tab4:
             # 🗓️ 1er HEATMAP: CALENDAR HEATMAP ESTACIONAL (Producción / Consumo)
             # =========================================================
             st.markdown("---")
-            st.subheader("🔥 Heatmap Estacional Energético")
-            st.markdown("*Matriz de calor que representa la generación o consumo diario de energía (kWh) a lo largo del año por cada año seleccionado.*")
 
             tipo_heat_sel = st.radio(
                 "Selecciona la métrica energética para el heatmap:",
@@ -1460,7 +1469,6 @@ with tab4:
                 key="selector_tipo_heatmap_solar"
             )
 
-            # Mapeamos la opción del radio button al tipo interno del DataFrame
             tipo_interno = "Produced" if tipo_heat_sel == "Producción" else "Consumed"
             color_escala = "YlOrRd" if tipo_interno == "Produced" else "Blues"
 
@@ -1477,7 +1485,6 @@ with tab4:
                     df_heat_data["Año"].astype(str)
                 )
 
-                # Creamos una clave combinada Año - Mes y ordenamos los años de más reciente a más antiguo
                 df_heat_data["Año_Mes"] = df_heat_data["Año"].astype(str) + " - " + df_heat_data["Mes"].astype(str)
                 anios_ordenados = sorted(años_sel, reverse=True)
                 index_esperado = [f"{a} - {m}" for a in anios_ordenados for m in orden_meses]
@@ -1496,10 +1503,27 @@ with tab4:
                     aggfunc="first"
                 ).reindex(index_esperado).fillna("")
 
+                # 1. Cálculos de totales mensuales y anuales
+                totales_mensuales = pivot_heat.sum(axis=1, skipna=True)
+                resumen_anual = df_heat_data.groupby("Año")["Valor"].sum()
+
+                # 2. Título dinámico con el total anual integrado arriba del todo
+                resumen_anual_str = "   |   ".join([f"<b>Año {a}:</b> {resumen_anual.get(a, 0):,.1f} kWh" for a in anios_ordenados])
+                titulo_html = (
+                    f"<b>🔥 Heatmap Estacional Energético: {tipo_heat_sel}</b><br>"
+                    f"<span style='font-size: 11.5px; color: #555;'><i>Total Anual ➔ {resumen_anual_str}</i></span>"
+                )
+
+                # 3. Etiquetas del eje Y con el acumulado mensual al lado
+                y_labels_con_totales = []
+                for idx_fila in pivot_heat.index:
+                    val_tot = totales_mensuales.get(idx_fila, 0)
+                    y_labels_con_totales.append(f"{idx_fila.ljust(12)}  ({val_tot:,.1f} kWh)")
+
                 fig_cal_heat = go.Figure(go.Heatmap(
                     z=pivot_heat.values,
                     x=pivot_heat.columns,
-                    y=pivot_heat.index,
+                    y=y_labels_con_totales,  
                     colorscale=color_escala,
                     customdata=pivot_fechas.values,
                     hovertemplate=f"<b>Fecha:</b> %{{customdata}}<br><b>{tipo_heat_sel}:</b> %{{z:.2f}} kWh<extra></extra>",
@@ -1507,26 +1531,31 @@ with tab4:
                 ))
 
                 fig_cal_heat.update_layout(
+                    title=dict(
+                        text=titulo_html,
+                        x=0.0,
+                        xanchor="left",
+                        font=dict(size=14, color="#222")
+                    ),
                     plot_bgcolor="#f4f4f4",
                     paper_bgcolor="#f4f4f4",
-                    font_color="#222",
+                    font=dict(family="monospace", color="#222"),  
                     height=max(380, len(index_esperado) * 22),
+                    margin=dict(l=40, r=40, t=80, b=40),  
                     xaxis=dict(title="Día del Mes", dtick=2),
                     yaxis=dict(title="", autorange="reversed")
                 )
                 st.plotly_chart(fig_cal_heat, use_container_width=True)
             else:
                 st.warning("No hay datos disponibles para la métrica y período seleccionados.")
-                
+  
 
             # =========================================================
-            # 🗓️ 2do HEATMAP: NUEVO HEATMAP METEOROLÓGICO (Actualizado con 4 métricas)
+            # 🗓️ 2do HEATMAP: NUEVO HEATMAP METEOROLÓGICO
             # =========================================================
             if not df_weather.empty:
                 st.markdown("---")
-                st.subheader("🌡️ Heatmap Meteorológico Estacional")
-                st.markdown("*Matriz de calor interactiva para visualizar las horas de sol, temperaturas extremas o precipitaciones diarias desglosada por años.*")
-
+                
                 metrica_heat = st.radio(
                     "Selecciona la métrica a visualizar en el heatmap:",
                     options=["Horas de luz", "Temp Max", "Temp Min", "Precipitaciones"],
@@ -1545,23 +1574,34 @@ with tab4:
                 anios_ordenados = sorted(años_sel, reverse=True)
                 index_esperado = [f"{a} - {m}" for a in anios_ordenados for m in orden_meses]
 
-                # Asignamos columna, unidad y paleta según la opción elegida en el radio button
                 if metrica_heat == "Horas de luz":
                     columna_valor = "Horas_Sol"
                     unidad_medida = "h"
                     escala_colores = "YlGnBu_r"
+                    modo_resumen = "sum"
+                    etiqueta_anual = "Total Anual"
+                    mostrar_acumulado_mensual = True
                 elif metrica_heat == "Temp Max":
                     columna_valor = "Temp_Max"
                     unidad_medida = "°C"
                     escala_colores = "RdBu_r"
+                    modo_resumen = "mean"
+                    etiqueta_anual = "Media Anual"
+                    mostrar_acumulado_mensual = False  # Sin acumulado mensual para temperaturas
                 elif metrica_heat == "Temp Min":
                     columna_valor = "Temp_Min"
                     unidad_medida = "°C"
                     escala_colores = "RdBu_r"
+                    modo_resumen = "mean"
+                    etiqueta_anual = "Media Anual"
+                    mostrar_acumulado_mensual = False  # Sin acumulado mensual para temperaturas
                 else:  # Precipitaciones
                     columna_valor = "Lluvia"
                     unidad_medida = "mm"
                     escala_colores = "Blues"
+                    modo_resumen = "sum"
+                    etiqueta_anual = "Total Anual"
+                    mostrar_acumulado_mensual = True
                     
                 pivot_meteo_val = df_weather.pivot_table(
                     index="Año_Mes",
@@ -1577,26 +1617,57 @@ with tab4:
                     aggfunc="first"
                 ).reindex(index_esperado).fillna("")
 
+                # 1. Cálculos de resúmenes (Suma para sol/lluvia, Media para temperaturas)
+                if modo_resumen == "sum":
+                    resumen_mensual = pivot_meteo_val.sum(axis=1, skipna=True)
+                    resumen_anual = df_weather.groupby("Año")[columna_valor].sum()
+                else:
+                    resumen_mensual = pivot_meteo_val.mean(axis=1, skipna=True)
+                    resumen_anual = df_weather.groupby("Año")[columna_valor].mean()
+
+                # 2. Título dinámico con el resumen anual integrado arriba
+                resumen_anual_str = "   |   ".join([f"<b>Año {a}:</b> {resumen_anual.get(a, 0):,.1f} {unidad_medida}" for a in anios_ordenados])
+                titulo_html = (
+                    f"<b>{metrica_heat}</b><br>"
+                    f"<span style='font-size: 11.5px; color: #555;'><i>{etiqueta_anual} ➔ {resumen_anual_str}</i></span>"
+                )
+
+                # 3. Etiquetas del eje Y (con el acumulado mensual al lado SOLO para sol y lluvia)
+                y_labels_meteo = []
+                for idx_fila in pivot_meteo_val.index:
+                    if mostrar_acumulado_mensual:
+                        val_mes = resumen_mensual.get(idx_fila, 0)
+                        y_labels_meteo.append(f"{idx_fila.ljust(12)}  ({val_mes:,.1f} {unidad_medida})")
+                    else:
+                        y_labels_meteo.append(idx_fila)  # Limpio para temperaturas
+
                 fig_meteo_heat = go.Figure(go.Heatmap(
                     z=pivot_meteo_val.values,
                     x=pivot_meteo_val.columns,
-                    y=pivot_meteo_val.index,
+                    y=y_labels_meteo,  
                     colorscale=escala_colores,
-                    customdata=pivot_meteo_fec.values,
-                    hovertemplate=f"<b>Fecha:</b> %{{customdata}}<br><b>{metrica_heat}:</b> %{{z:.1f}} {unidad_medida}<extra></extra>", # 👈 Cambiado a .1f
+                    customdata=pivot_fechas.values,
+                    hovertemplate=f"<b>Fecha:</b> %{{customdata}}<br><b>{metrica_heat}:</b> %{{z:.1f}} {unidad_medida}<extra></extra>",
                     colorbar=dict(title=dict(text=unidad_medida))
                 ))
 
                 fig_meteo_heat.update_layout(
+                    title=dict(
+                        text=titulo_html,
+                        x=0.0,
+                        xanchor="left",
+                        font=dict(size=14, color="#222")
+                    ),
                     plot_bgcolor="#f4f4f4",
                     paper_bgcolor="#f4f4f4",
-                    font_color="#222",
+                    font=dict(family="monospace", color="#222"),
                     height=max(380, len(index_esperado) * 22),
+                    margin=dict(l=40, r=40, t=80, b=40),
                     xaxis=dict(title="Día del Mes", dtick=2),
                     yaxis=dict(title="", autorange="reversed")
                 )
                 st.plotly_chart(fig_meteo_heat, use_container_width=True)
-
+    
         except Exception as e:
             st.warning(f"Error al procesar el panel meteorológico: {e}")
     else:
@@ -2143,26 +2214,27 @@ with tab8:
     # --- SECCIÓN 2: GUÍA POR PESTAÑAS Y GRÁFICAS ---
     st.markdown("### 🗂️ Descripción Funcional por Pestañas")
 
-    tab_m1, tab_m2, tab_m3, tab_m4, tab_m5 = st.tabs([
+    tab_m1, tab_m2, tab_m3, tab_m4, tab_m5, tab_m6  = st.tabs([
         "Tab 1: Evolución Diaria", 
         "Tab 2: Evolución Mensual", 
         "Tab 3: Evolución Anual", 
         "Tab 4: Paneles y Clima",
-        "Tab 5: Impacto y Cashflow"
+        "Tab 5: Impacto y Cashflow",
+        "Tab 6: Tabla de Datos"
     ])
     
     with tab_m1:
-        st.markdown("#### 📈 Tab 1 – Evolución Diaria")
-        st.markdown("""
-        * **Propósito:** Exploración detallada de la producción solar, autoconsumo y exportación a escala diaria.
-        * **Componentes principales:**
-          * **Filtros Temporales:** Selectores multianuales, de meses (`Jan` a `Dez`) y rango deslizante de días del mes.
-          * **Tarjetas KPI (Métricas):** Resumen de energía producida, autoconsumida, consumida de la red y vertida.
-          * **Gráfica Diaria:** Línea temporal interactiva que contrasta la generación fotovoltaica con los hábitos de consumo día a día.
-        """)
+            st.markdown("#### 📈 Tab 1 – Evolución Diaria")
+            st.markdown("""
+            * **Propósito:** Exploración detallada de la producción solar, autoconsumo y exportación a escala diaria.
+            * **Componentes principales:**
+              * **Filtros Temporales:** Selectores multianuales, de meses (`Jan` a `Dez`) y rango deslizante de días del mes.
+              * **Tarjetas KPI (Métricas):** Resumen ejecutivo de energía producida, autoconsumida, consumida de la red y vertida.
+              * **Gráfica Diaria Optimizada:** Línea temporal interactiva con espaciado diario uniforme (usando `type="category"`) que contrasta la generación fotovoltaica con los hábitos de consumo día a día, equipada con leyendas superpuestas para una óptima gestión del espacio y legibilidad visual.
+            """)
 
     with tab_m2:
-        st.markdown("#### 📊 Tab 2 – Evolución Mensual")
+        st.markdown("#### 📊 Tab 2 – EDistribución Mensual")
         st.markdown("""
         * **Propósito:** Análisis estacional de la energía generada y consumida agrupada por meses.
         * **Componentes principales:**
@@ -2180,23 +2252,20 @@ with tab8:
         """)
 
     with tab_m4:
-        st.markdown("#### 🌤️ Tab 4 – Paneles y Clima")
-        st.markdown("""
-        * **Propósito:** Fusionar el rendimiento energético de los paneles con las condiciones meteorológicas reales e históricas mediante la API de Open-Meteo.
-        * **Características:**
-          * **Buscador de Ubicación Global:** Caja de texto libre para consultar ciudades o códigos postales del mundo (por defecto *Ingolstadt*).
-          * **Gráfica Clima vs Energía:** Curvas de producción/consumo combinadas con iconos meteorológicos (☀️, ⛅, ☁️, 🌧️, ❄️, 🌩️, 🌁) y temperaturas extremas.
-          * **Tabla Detallada Diaria:** Registro tabulado con horas de sol, viento, lluvia y nieve.
-          * **Heatmaps Estacionales:** Dos matrices de calor con Enero arriba y Diciembre abajo:
-            1. *Producción Solar:* Formato de fecha `DD.MM.YYYY` en el hover.
-            2. *Meteorología:* Selector interactivo entre **Horas de luz** (escala `YlGnBu_r`, donde más luz es más claro) y **Temperatura media** (`RdBu_r`, con azules/morados para frío y cálidos para calor).
-
-        * **Heatmaps Meteorológicos Estacionales:** 
-          * **Matriz de Calor de Producción Solar:** Representa en formato de calendario estacional (con los meses ordenados de Enero a Diciembre y los años en orden descendente) la generación diaria de energía en kWh. Al pasar el cursor (*hover*), muestra la fecha exacta en formato `DD.MM.YYYY` y el valor de producción.
-          * **Matriz de Calor Meteorológica:** Permite alternar mediante un selector entre dos métricas clave:
-            1. *Horas de luz:* Visualiza la duración de la insolación diaria utilizando una escala de colores optimizada (`YlGnBu_r`).
-            2. *Temperatura media:* Muestra la temperatura media diaria registrada (`Temp_Media`) utilizando una escala térmica divergente (`RdBu_r`, donde los tonos fríos representan bajas temperaturas y los cálidos el calor estival).
-        """)
+            st.markdown("#### 🌤️ Tab 4 – Paneles y Clima")
+            st.markdown("""
+            * **Propósito:** Fusionar el rendimiento energético de los paneles con las condiciones meteorológicas reales e históricas mediante la API de Open-Meteo.
+            * **Características:**
+              * **Buscador de Ubicación Global:** Caja de texto libre para consultar ciudades o códigos postales del mundo (por defecto *Ingolstadt*).
+              * **Gráfica Clima vs Energía:** Curvas de producción/consumo combinadas con iconos meteorológicos (☀️, ⛅, ☁️, 🌧️, ❄️, 🌩️, 🌁) y temperaturas extremas.
+              * **Tabla Detallada Diaria:** Registro tabulado con horas de sol, viento, lluvia y nieve.
+              * **Heatmaps Estacionales Avanzados:** Dos matrices de calor con los meses ordenados de Enero a Diciembre y los años en orden descendente, equipadas con **títulos dinámicos superiores** que muestran los resúmenes anuales desglosados y acumulados/medias mensuales integrados en los ejes:
+                1. *Heatmap Estacional Energético:* Visualiza la generación (escala `YlOrRd`) o consumo (escala `Blues`) diario de energía en kWh. Incorpora el **total anual** integrado en el título superior de la gráfica y los **totales mensuales acumulados** alineados a la izquierda en el eje Y (`DD.MM.YYYY` en el *hover*).
+                2. *Heatmap Meteorológico Estacional:* Permite alternar mediante un selector interactivo entre cuatro métricas clave:
+                   * **Horas de luz:** Insolación diaria (escala `YlGnBu_r`), con **total anual** en el título y **total mensual** acumulado en el eje Y.
+                   * **Temp Max / Temp Min:** Temperaturas extremas diarias (escala divergente `RdBu_r`), mostrando la **media anual** en el título superior y la matriz limpia orientada al análisis térmico sin acumulados mensuales.
+                   * **Precipitaciones:** Lluvia diaria (escala `Blues`), con **total anual** en el título y **total mensual** acumulado en el eje Y.
+            """)
 
     with tab_m5:
         st.markdown("#### 🌍 Tab 5 – Impacto Ambiental y Económico")
@@ -2207,6 +2276,16 @@ with tab8:
           * **Resumen Ecológico:** Equivalencias de emisiones en km de transporte (coche, avión, barco) y absorción anual en árboles.
           * **Resumen Financiero:** Autoconsumo, excedentes y cuota fija prorrateada.
           * **Cashflow Acumulado y Previsión a 10 Años (Layout 70% / 30%):** Gráfica de barras verticales que arranca en **2022 con la inversión inicial en negativo (rojo)** y acumula los ahorros netos anuales a partir de 2023. Incluye sliders específicos para tarifas futuras (≥ 2028) y hover detallado con el desglose anual por concepto.
+        """)
+
+    with tab_m6:
+        st.markdown("#### 📋 Tab 6 – Tabla de Datos")
+        st.markdown("""
+        * **Propósito:** Inspección detallada, filtrado avanzado y exportación de los datos brutos y procesados del sistema energético y meteorológico.
+        * **Características:**
+          * **Visualización Tabular Interactiva:** Tabla dinámica con ordenación de columnas, búsqueda en tiempo real y ajuste automático de formato numérico y temporal.
+          * **Filtros Cruzados:** Selección flexible por rangos de fechas, años, meses o tipos de métrica (energía y clima).
+          * **Exportación de Datos:** Opciones integradas para la descarga directa de los conjuntos de datos filtrados para análisis externos o reportes avanzados.
         """)
 
     st.divider()
