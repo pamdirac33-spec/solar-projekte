@@ -1712,7 +1712,8 @@ with tab5:
     ingresos_excedentes = total_to_netz * precio_excedente
     meses_activos_ratio = len(meses_sel) / 12.0
     num_anios_seleccionados = len(años_sel) if len(años_sel) > 0 else 1
-    cuota_fija_periodo = cuota_fija * num_anios_seleccionados
+    cuota_fija_periodo = cuota_fija * meses_activos_ratio * num_anios_seleccionados
+    
     ahorro_total_neto = ahorro_autoconsumo + ingresos_excedentes + cuota_fija_periodo
 
     st.markdown("### 🌳 Resumen de Impacto Ecológico")
@@ -1863,6 +1864,7 @@ with tab5:
 
     df_financiero_anual = pd.DataFrame(datos_financieros_anuales)
 
+    # 1. Creamos la gráfica de barras apiladas base
     fig_fin = px.bar(
         df_financiero_anual,
         x="Año",
@@ -1874,16 +1876,33 @@ with tab5:
         custom_data=["Concepto"]
     )
     
-    # Formato del hover personalizado: Concepto en negrita, valor con dos decimales y sin año
+    # Formato del hover y texto dentro de las barras segmentadas
     fig_fin.update_traces(
         texttemplate='%{y:,.2f} €', 
         textposition='inside',
         hovertemplate="<b>%{customdata[0]}</b><br>%{y:,.2f} €<extra></extra>"
     )
+
+    # 2. 🛠️ NUEVO: Calculamos los totales por año para mostrarlos arriba del todo de cada barra
+    df_totales_anuales = df_financiero_anual.groupby("Año", as_index=False)["Euros"].sum()
+
+    # Añadimos una traza de texto flotante en la parte superior de cada barra apilada
+    fig_fin.add_trace(go.Scatter(
+        x=df_totales_anuales["Año"],
+        y=df_totales_anuales["Euros"],
+        mode="text",
+        text=df_totales_anuales["Euros"].apply(lambda v: f"{v:,.2f} €".replace(",", ".")),
+        textposition="top center",
+        textfont=dict(size=12, weight="bold", color="#222"),
+        showlegend=False,
+        hoverinfo="skip"
+    ))
     
     fig_fin.update_layout(
         plot_bgcolor="#f4f4f4", paper_bgcolor="#f4f4f4", font_color="#222",
-        height=450, xaxis=dict(title="Año", type='category'), yaxis=dict(title="Euros (€)")
+        height=480,  # Ampliamos ligeramente la altura para que el texto superior no quede justo al borde
+        xaxis=dict(title="Año", type='category'), 
+        yaxis=dict(title="Euros (€)", rangemode="tozero")
     )
     st.plotly_chart(fig_fin, use_container_width=True)
 
@@ -1900,8 +1919,8 @@ with tab5:
     with col_controles:
         st.markdown("#### ⚙️ Parámetros Cashflow")
         inversion_inicial = st.number_input("Inversión Inicial (€)", min_value=0.0, max_value=30000.0, value=8600.0, step=200.0, format="%.2f")
-        precio_luz_futuro = st.slider("Precio Luz Futuro (≥ 2028) (€/kWh)", min_value=0.10, max_value=0.60, value=0.3651, step=0.01, format="%.4f €")
-        cuota_fija_futuro = st.slider("Cuota Fija Futura (≥ 2028) (€/año)", min_value=0.0, max_value=400.0, value=213.60, step=1.0, format="%.2f €")
+        precio_luz_futuro = st.slider("Precio Luz Futuro (≥ 2027) (€/kWh)", min_value=0.20, max_value=1.60, value=0.3651, step=0.01, format="%.4f €")
+        cuota_fija_futuro = st.slider("Cuota Fija Futura (≥ 2027) (€/año)", min_value=200.0, max_value=600.0, value=213.60, step=1.0, format="%.2f €")
 
     # 1. Obtener rendimiento anual base del último año disponible para las proyecciones futuras
     ultimo_anio_disponible = int(df_long["Año"].max())
@@ -1922,6 +1941,7 @@ with tab5:
             ahorro_ac = 0.0
             c_fija = 0.0
             ingresos_ex = 0.0
+            ahorro_total_anual = 0.0  # 👈 En 2022 es el año de la inversión inicial
         else:
             if anio <= ultimo_anio_disponible:
                 df_a = df_long[df_long["Año"] == anio]
@@ -1931,32 +1951,27 @@ with tab5:
                 meses_faltantes = [m for m in orden_meses if m not in meses_presentes]
                 
                 if meses_faltantes and anio > min(anos_cashflow):
-                    # Si faltan meses, buscamos los datos del año anterior para esos mismos meses
                     df_anterior = df_long[df_long["Año"] == (anio - 1)]
                     df_faltantes = df_anterior[df_anterior["Mes"].isin(meses_faltantes)]
                     
-                    # Sumamos lo real del año actual + lo extrapolado del año anterior
                     pv_u = df_a[df_a["Tipo"] == "PV Used"]["Valor"].sum() + df_faltantes[df_faltantes["Tipo"] == "PV Used"]["Valor"].sum()
                     to_n = df_a[df_a["Tipo"] == "To Netz"]["Valor"].sum() + df_faltantes[df_faltantes["Tipo"] == "To Netz"]["Valor"].sum()
                 else:
-                    # Si el año está completo, usamos sus datos reales directamente
                     pv_u = df_a[df_a["Tipo"] == "PV Used"]["Valor"].sum()
                     to_n = df_a[df_a["Tipo"] == "To Netz"]["Valor"].sum()
                 
                 p_luz = precio_luz
                 c_fija = cuota_fija
             else:
-                # Años futuros (proyecciones a 10 años)
                 pv_u = pv_used_base
                 to_n = to_netz_base
-                p_luz = precio_luz_futuro if anio >= 2028 else precio_luz
-                c_fija = cuota_fija_futuro if anio >= 2028 else cuota_fija
+                p_luz = precio_luz_futuro if anio >= 2027 else precio_luz
+                c_fija = cuota_fija_futuro if anio >= 2027 else cuota_fija
 
             ahorro_ac = pv_u * p_luz
             ingresos_ex = to_n * precio_excedente
             ahorro_total_anual = ahorro_ac + c_fija + ingresos_ex
 
-            # Acumulamos sumando el ahorro anual al saldo anterior
             cashflow_acumulado += ahorro_total_anual
 
         datos_cashflow.append({
@@ -1965,6 +1980,7 @@ with tab5:
             "Autoconsumo": ahorro_ac if anio != 2022 else 0.0,
             "Cuota Fija": c_fija if anio != 2022 else 0.0,
             "Excedente": ingresos_ex if anio != 2022 else 0.0,
+            "Ahorro Total Anual": ahorro_total_anual,  # 👈 Añadido para el customdata
             "Estado": "Negativo" if cashflow_acumulado < 0 else "Positivo"
         })
 
@@ -1979,7 +1995,7 @@ with tab5:
             color="Estado",
             color_discrete_map={"Negativo": "#E74C3C", "Positivo": "#3498DB"},
             title="Evolución del Cashflow Acumulado y Previsión a 10 Años (Inv. 2022)",
-            custom_data=["Autoconsumo", "Cuota Fija", "Excedente"]
+            custom_data=["Autoconsumo", "Cuota Fija", "Excedente", "Ahorro Total Anual"]  # 👈 Incluimos el nuevo campo en custom_data
         )
 
         fig_cf.update_traces(
@@ -1988,7 +2004,7 @@ with tab5:
             hovertemplate=(
                 "<b>Año: %{x}</b><br>"
                 "Cashflow Acumulado: %{y:,.2f} €<br><br>"
-                "<b>Ahorro del año:</b><br>"
+                "<b>Ahorro del año: %{customdata[3]:,.2f} €</b><br>"
                 "• Autoconsumo: %{customdata[0]:,.2f} €<br>"
                 "• Cuota Fija: %{customdata[1]:,.2f} €<br>"
                 "• Excedente: %{customdata[2]:,.2f} €<extra></extra>"
@@ -2004,7 +2020,7 @@ with tab5:
             yaxis=dict(title="Euros Acumulados (€)"),
             showlegend=False,
             hoverlabel=dict(
-                align="left"  # 👈 Esto fuerza globalmente que el texto del hover esté alineado a la izquierda en todas las barras
+                align="left"
             )
         )
 
@@ -2192,7 +2208,7 @@ with tab8:
           * *To Netz:* Excedentes vertidos a la red eléctrica remunerados mediante el precio de compensación.
         * **¿Qué es el Cashflow Acumulado y la Previsión?:** El modelo financiero evalúa la rentabilidad a largo plazo partiendo de una **Inversión Inicial en 2022** (con valor base ajustable de `-8.600,00 €`). 
           * A partir de 2023, la aplicación resta año a año el ahorro neto total (autoconsumo + cuota fija del contador + excedentes) a la inversión inicial.
-          * Permite proyectar el flujo de caja hasta 10 años más allá del último registro disponible, aplicando nuevos precios de la luz y cuotas fijas configurables a partir de 2028.
+          * Permite proyectar el flujo de caja hasta 10 años más allá del último registro disponible, aplicando nuevos precios de la luz y cuotas fijas configurables a partir de 2027.
         """)
         
     with col_t2:
@@ -2275,7 +2291,7 @@ with tab8:
           * **Sliders de Parámetros:** Ajuste de precio de la electricidad, cuota fija del contador, precio de excedentes y factor de CO₂ evitado.
           * **Resumen Ecológico:** Equivalencias de emisiones en km de transporte (coche, avión, barco) y absorción anual en árboles.
           * **Resumen Financiero:** Autoconsumo, excedentes y cuota fija prorrateada.
-          * **Cashflow Acumulado y Previsión a 10 Años (Layout 70% / 30%):** Gráfica de barras verticales que arranca en **2022 con la inversión inicial en negativo (rojo)** y acumula los ahorros netos anuales a partir de 2023. Incluye sliders específicos para tarifas futuras (≥ 2028) y hover detallado con el desglose anual por concepto.
+          * **Cashflow Acumulado y Previsión a 10 Años (Layout 70% / 30%):** Gráfica de barras verticales que arranca en **2022 con la inversión inicial en negativo (rojo)** y acumula los ahorros netos anuales a partir de 2023. Incluye sliders específicos para tarifas futuras (≥ 2027) y hover detallado con el desglose anual por concepto.
         """)
 
     with tab_m6:
