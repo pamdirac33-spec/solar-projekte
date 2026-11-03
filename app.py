@@ -1110,7 +1110,7 @@ with tab3:
     st.markdown("---")
     
 # =========================================================
-# 4) 🌤️ PANEL DE CLIMA E HISTÓRICO EN INGOLSTADT
+# 4) 🌤️ PANEL DE CLIMA E HISTÓRICO
 # =========================================================
 with tab4:
     import requests
@@ -1119,17 +1119,16 @@ with tab4:
     st.subheader("🌤️ Panel Meteorológico")
     st.markdown("*Datos públicos de tiempo vs producción y consumo total para los meses seleccionados.*")
 
-    # ÚNICA CAJA DE TEXTO LIBRE: Precargada por defecto con "Ingolstadt"
     busqueda_usuario = st.text_input(
         "🔍 Escribe cualquier ciudad o código postal del mundo (ej. Ingolstadt, 47004):",
-        value="Ingolstadt"
+        value="Ingolstadt",
+        key="busqueda_clima_input"
     )
 
-    # Función para buscar coordenadas globales en tiempo real mediante la API de Open-Meteo
     @st.cache_data
     def buscar_coordenadas(nombre_lugar):
         if not nombre_lugar.strip():
-            return 48.7657, 11.4231, "Ingolstadt" # Fallback por defecto
+            return 48.7657, 11.4231, "Ingolstadt"
         
         url_geo = f"https://geocoding-api.open-meteo.com/v1/search?name={nombre_lugar}&count=1&language=es&format=json"
         try:
@@ -1137,47 +1136,38 @@ with tab4:
             data = res.json()
             if "results" in data and len(data["results"]) > 0:
                 loc = data["results"][0]
-                lat = loc["latitude"]
-                lon = loc["longitude"]
-                nombre = loc.get("name", nombre_lugar)
-                pais = loc.get("country", "")
-                nombre_completo = f"{nombre} ({pais})" if pais else nombre
-                return lat, lon, nombre_completo
+                return loc["latitude"], loc["longitude"], f"{loc.get('name', nombre_lugar)} ({loc.get('country', '')})"
         except Exception:
             pass
-        
         return 48.7657, 11.4231, "Ingolstadt"
 
     LAT_LOC, LON_LOC, nombre_loc = buscar_coordenadas(busqueda_usuario)
 
-    def obtener_info_clima(code, horas_sol=0):
+    def obtener_info_clima(code, horas_sol=0, horas_nubes=0, pct_sol=0):
         if isinstance(code, list):
             code = code[0] if len(code) > 0 else 0
-            
         if pd.isna(code):
             return "⛅ Parcialmente nublado"
-
         try:
             code = int(code)
         except Exception:
             return "⛅ Parcialmente nublado"
         
-        if code == 3:
-            return "☁️ Nublado"
+        if code in [95, 96, 99]:
+            return "🌩️ Tormenta"
+        elif code in [71, 73, 75, 77, 85, 86] and (horas_sol < horas_nubes):
+            return "❄️ Nieve"
         elif code in [45, 48]:
             return "🌁️ Niebla"
-        elif code in [53, 55, 56, 57, 63, 65, 66, 67, 80, 81, 82]:
+        elif code in [53, 55, 56, 57, 63, 65, 66, 67, 80, 81, 82] and pct_sol < 80.0:
             return "🌧️ Lluvioso"
-        elif code in [71, 73, 75, 77, 85, 86] and horas_sol < 10:
-            return "❄️ Nieve"
-        elif code in [95, 96, 99]:
-            return "🌩️Tormenta"
-        elif code in [2, 51, 61] and (horas_sol >= 5.5 and horas_sol < 10.8):
-            return "⛅ Parcialmente nublado"
-        elif code in [0, 1] or horas_sol >= 10.8:
+        elif code in [0, 1] or pct_sol >= 70.0:
             return "☀️ Soleado"
-        else:
+        elif code in [2, 51, 61] and (30.0 <= pct_sol < 70.0):
             return "⛅ Parcialmente nublado"
+        elif code == 3 and pct_sol < 30.0:
+            return "⛅ Nublado"
+        return "⛅ Parcialmente nublado"
 
     if años_sel and meses_sel:
         try:
@@ -1192,14 +1182,14 @@ with tab4:
             
             @st.cache_data
             def cargar_clima_localidad(lat, lon, start_d, end_d):
-                url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date={start_d}&end_date={end_d}&daily=weathercode,precipitation_sum,snowfall_sum,temperature_2m_max,temperature_2m_min,sunshine_duration,windspeed_10m_max&timezone=Europe/Berlin"
+                # 🛠️ CORRECCIÓN: Se añade 'daylight_duration' junto a sunshine_duration en los parámetros daily
+                url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date={start_d}&end_date={end_d}&daily=weathercode,precipitation_sum,snowfall_sum,temperature_2m_max,temperature_2m_min,sunshine_duration,daylight_duration,windspeed_10m_max&timezone=Europe/Berlin"
                 try:
                     response = requests.get(url)
                     data = response.json()
                     if "daily" in data:
                         df_w = pd.DataFrame(data["daily"])
                         df_w["time"] = pd.to_datetime(df_w["time"])
-                        df_w["Fecha"] = df_w["time"].dt.strftime("%Y.%m.%d")
                         df_w["Año"] = df_w["time"].dt.year
                         df_w["Mes_Num"] = df_w["time"].dt.month
                         df_w["Día"] = df_w["time"].dt.day
@@ -1207,11 +1197,25 @@ with tab4:
                         meses_es = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Avr", 5: "Mai", 6: "Jun",
                                     7: "Jul", 8: "Aug", 9: "Sep", 10: "Okt", 11: "Nov", 12: "Dez"}
                         df_w["Mes"] = df_w["Mes_Num"].map(meses_es)
+                        df_w["Fecha"] = df_w["time"].dt.strftime("%Y.%m.%d")
                         
-                        df_w["Horas_Sol"] = (df_w["sunshine_duration"].fillna(0) / 3600).round(1) if "sunshine_duration" in df_w else 0
-                        df_w["Horas_Nubes"] = (12 - df_w["Horas_Sol"]).clip(lower=0).round(1)
+                        # Conversión a horas
+                        df_w["Horas_Sol"] = (df_w["sunshine_duration"].fillna(0) / 3600).round(1)
+                        df_w["Horas_Luz"] = (df_w["daylight_duration"].fillna(0) / 3600.0)
                         
-                        df_w["Clima_Texto"] = [obtener_info_clima(code, sol) for code, sol in zip(df_w["weathercode"], df_w["Horas_Sol"])]
+                        # 🛠️ Cálculo seguro del porcentaje de sol real (evitando división por cero)
+                        daylight_sec = df_w["daylight_duration"].replace(0, 1)
+                        df_w["Pct_Sol"] = ((df_w["sunshine_duration"].fillna(0) / daylight_sec) * 100).fillna(0).round(1)
+                        
+                        # Horas nubladas estimadas
+                        df_w["Horas_Nubes"] = (df_w["Horas_Luz"] - df_w["Horas_Sol"]).clip(lower=0).round(1)
+
+                        # Asignación pasando el porcentaje de sol a la función de clima
+                        df_w["Clima_Texto"] = [
+                            obtener_info_clima(c, s, n, p) 
+                            for c, s, n, p in zip(df_w["weathercode"], df_w["Horas_Sol"], df_w["Horas_Nubes"], df_w["Pct_Sol"])
+                        ]
+                        
                         df_w["Icono"] = [
                             "☀️" if "Soleado" in t else 
                             ("⛅" if "Parcial" in t else 
@@ -1234,7 +1238,8 @@ with tab4:
                         df_w["Temp_Media"] = ((df_w["Temp_Max"] + df_w["Temp_Min"]) / 2).round(2)
                         
                         return df_w[["Fecha", "Año", "Mes_Num", "Mes", "Día", "Clima_Texto", "Icono", "Temp_Max", "Temp_Min", "Temp_Media", "Horas_Sol", "Horas_Nubes", "Viento", "Lluvia", "Nieve"]]
-                except Exception:
+                except Exception as e:
+                    print(f"Error cargando clima: {e}")
                     pass
                 return pd.DataFrame()
 
@@ -1456,7 +1461,7 @@ with tab4:
                         "Nieve": st.column_config.NumberColumn("Nieve", format="%.1f cm")
                     }
                 )
-
+                
             # =========================================================
             # 🗓️ 1er HEATMAP: CALENDAR HEATMAP ESTACIONAL (Producción / Consumo)
             # =========================================================
@@ -1675,6 +1680,7 @@ with tab4:
 
     st.markdown("---")
     
+
 # =========================================================
 # 5) 💶 NUEVO TAB: IMPACTO AMBIENTAL & ECONÓMICO
 # =========================================================
