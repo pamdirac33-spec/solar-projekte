@@ -1,6 +1,8 @@
 streamlit>=1.40
 pandas
-plotly
 openpyxl
+plotly
+requests
+entsoe-py
 
 
