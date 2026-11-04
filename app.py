@@ -2041,7 +2041,7 @@ with tab6:
     st.subheader("⚡ Origen de la Energía de Red y Sostenibilidad (Energy-Charts)")
 
     st.markdown(
-        "*Desglose oficial europeo del mix de generación eléctrica, análisis de emisiones de CO₂ y ratio de energía limpia (Fuente: Fraunhofer ISE).*"
+        "*Desglose oficial europeo del mix de generación eléctrica (en GW), análisis de emisiones de CO₂ y ratio de energía limpia (Fuente: Fraunhofer ISE).*"
     )
 
     # Diccionario exclusivo con los 5 países requeridos
@@ -2116,174 +2116,181 @@ with tab6:
 
                 if not df_entsoe_filtrado.empty:
                     columnas_crudas = [
-                    c for c in df_entsoe_filtrado.columns 
-                    if c not in ["tiempo_utc", "Año", "Mes_Num", "Mes", "Fecha_Str"] 
-                    and pd.api.types.is_numeric_dtype(df_entsoe_filtrado[c])
-                    and "load" not in c.lower()  # <-- Filtramos 'load' aquí
-                ]
-
-                # --- AGRUPACIÓN Y TRADUCCIÓN AL ESPAÑOL ---
-                df_procesado = df_entsoe_filtrado[["tiempo_utc", "Año", "Mes_Num", "Mes"]].copy()
-                df_procesado["Fecha"] = df_entsoe_filtrado["tiempo_utc"].dt.strftime("%Y.%m.%d") # Renombramos a Fecha
-
-                # Agrupamos tecnologías por categorías lógicas en español
-                grupos_tec = {
-                    "Eólica": [c for c in columnas_crudas if "wind" in c.lower()],
-                    "Hidráulica": [c for c in columnas_crudas if "hydro" in c.lower() or "water" in c.lower()],
-                    "Carbón": [c for c in columnas_crudas if "coal" in c.lower() or "lignite" in c.lower() or "brown coal" in c.lower() or "hard coal" in c.lower()],
-                    "Solar": [c for c in columnas_crudas if "solar" in c.lower()],
-                    "Gas natural": [c for c in columnas_crudas if "gas" in c.lower()],
-                    "Nuclear": [c for c in columnas_crudas if "nuclear" in c.lower()],
-                    "Biomasa": [c for c in columnas_crudas if "biomass" in c.lower()],
-                    "Petróleo": [c for c in columnas_crudas if "oil" in c.lower()]
-                }
-
-                # Sumamos las columnas que pertenecen a cada grupo y evitamos negativos (bombeo)
-                for nombre_es, cols in grupos_tec.items():
-                    if cols:
-                        df_procesado[nombre_es] = df_entsoe_filtrado[cols].sum(axis=1).clip(lower=0)
-
-                # Columnas de tecnologías ya traducidas y agrupadas presentes en el DF
-                columnas_tecnologias = [k for k in grupos_tec.keys() if k in df_procesado.columns]
-
-                # Filtramos nuevamente con las fechas seleccionadas
-                df_entsoe_filtrado = df_procesado[
-                    (df_procesado["Año"].isin(años_sel)) & 
-                    (df_procesado["Mes"].isin(meses_sel))
-                ].copy()
-
-                if not df_entsoe_filtrado.empty:
-                    total_generacion_mw = df_entsoe_filtrado[columnas_tecnologias].sum().sum()
-                    
-                    # --- Cálculos de Sostenibilidad y CO2 ---
-                    factores_co2 = {
-                        "Carbón": 900, "Gas natural": 490, "Petróleo": 650
-                    }
-                    clean_keywords = ["Eólica", "Hidráulica", "Solar", "Biomasa", "Nuclear"]
-                    
-                    energias_limpias = []
-                    energias_sucias = []
-                    emisiones_totales_toneladas = 0
-                    
-                    totales_por_tecnologia = df_entsoe_filtrado[columnas_tecnologias].sum()
-                    
-                    for tec, val in totales_por_tecnologia.items():
-                        factor = factores_co2.get(tec, 0)
-                        emisiones_totales_toneladas += (val * 24 * factor) / 1_000_000
-                        
-                        if tec in clean_keywords:
-                            energias_limpias.append(val)
-                        else:
-                            energias_sucias.append(val)
-
-                    total_limpia = sum(energias_limpias)
-                    total_sucia = sum(energias_sucias)
-                    pct_limpia = (total_limpia / total_generacion_mw * 100) if total_generacion_mw > 0 else 0
-
-                    energia_total_gwh = total_generacion_mw * 24 / 1000
-                    intensidad_carbono = (emisiones_totales_toneladas * 1_000_000 / (energia_total_gwh * 1_000_000)) if energia_total_gwh > 0 else 0
-
-                    # --- RENDERIZAR KPIS ---
-                    st.markdown("### 📊 KPIs Avanzados de Mercado y Sostenibilidad")
-                    col_k1, col_k2, col_k3, col_k4 = st.columns(4)
-                    
-                    with col_k1:
-                        st.metric("📊 Volumen Red", f"{total_generacion_mw:,.0f} MW")
-                    with col_k2:
-                        st.metric("🌱 Energía Limpia", f"{pct_limpia:.1f}%")
-                    with col_k3:
-                        st.metric("☁️ Emisiones Totales", f"{emisiones_totales_toneladas:,.0f} t")
-                    with col_k4:
-                        st.metric("🏭 Intensidad CO₂", f"{intensidad_carbono:.1f} g/kWh")
-
-                    st.markdown("---")
-
-                    # --- GRÁFICOS DE DONA Y DESGLOSE ---
-                    col_g1, col_g2 = st.columns(2)
-                    
-                    with col_g1:
-                        st.markdown("##### 🟢 Mix: Limpia vs Fósil / No Limpia")
-                        df_mix_pie = pd.DataFrame({
-                            "Tipo": ["Limpia / Baja en Carbono", "Fósil / Convencional"],
-                            "Generacion": [total_limpia, total_sucia]
-                        })
-                        fig_pie = px.pie(
-                            df_mix_pie, names="Tipo", values="Generacion", hole=0.4,
-                            color_discrete_sequence=["#2ecc71", "#e74c3c"]
-                        )
-                        fig_pie.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=10))
-                        st.plotly_chart(fig_pie, use_container_width=True)
-
-                    with col_g2:
-                        st.markdown("##### ☀️ Desglose de Tecnologías Limpias")
-                        df_tec_clean = pd.DataFrame({
-                            "Tecnología": [t for t in clean_keywords if t in totales_por_tecnologia and totales_por_tecnologia[t] > 0],
-                            "Generacion": [totales_por_tecnologia[t] for t in clean_keywords if t in totales_por_tecnologia and totales_por_tecnologia[t] > 0]
-                        })
-                        if not df_tec_clean.empty:
-                            fig_clean = px.bar(
-                                df_tec_clean, x="Tecnología", y="Generacion",
-                                color="Tecnología", color_discrete_sequence=px.colors.qualitative.Pastel
-                            )
-                            fig_clean.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
-                            st.plotly_chart(fig_clean, use_container_width=True)
-                        else:
-                            st.info("No hay datos de tecnologías limpias para el filtro actual.")
-
-                    st.markdown("---")
-
-                    # --- GRÁFICO DE BARRAS APILADAS PRINCIPAL (Con "Fecha" en el hover) ---
-                    st.markdown("##### 📈 Evolución Diaria del Mix de Generación Real (MW)")
-
-                    orden_tecnologias_deseado = [
-                        "Nuclear", "Petróleo", "Carbón", "Gas natural", 
-                        "Eólica", "Solar", "Hidráulica", "Biomasa"
+                        c for c in df_entsoe_filtrado.columns 
+                        if c not in ["tiempo_utc", "Año", "Mes_Num", "Mes", "Fecha_Str"] 
+                        and pd.api.types.is_numeric_dtype(df_entsoe_filtrado[c])
+                        and "load" not in c.lower()  # <-- Filtramos 'load' aquí
                     ]
-                    
-                    # Filtramos el orden para incluir solo las tecnologías que realmente existan en los datos
-                    columnas_tecnologias = [t for t in orden_tecnologias_deseado if t in df_entsoe_filtrado.columns]
 
-                    df_melt_entsoe = df_entsoe_filtrado.melt(
-                        id_vars=["Fecha"],
-                        value_vars=columnas_tecnologias,
-                        var_name="Tecnología",
-                        value_name="Generacion_MW"
-                    ).fillna(0)
+                    # --- AGRUPACIÓN, TRADUCCIÓN Y CONVERSIÓN A GW (/ 1000) ---
+                    df_procesado = df_entsoe_filtrado[["tiempo_utc", "Año", "Mes_Num", "Mes"]].copy()
+                    df_procesado["Fecha"] = df_entsoe_filtrado["tiempo_utc"].dt.strftime("%Y.%m.%d")
 
-                    # Mapeo de colores estándar de la industria energética
-                    mapa_colores = {
-                        "Nuclear": "#9b59b6",     # Morado
-                        "Petróleo": "#c76606",    # Marrón/Gris neutro
-                        "Carbón": "#34495e",      # Gris oscuro / Antracita
-                        "Gas natural": "#95a5a6", # Gris claro
-                        "Eólica": "#1abc9c",      # Turquesa / Verde eólico
-                        "Solar": "#f1c40f",       # Amarillo
-                        "Hidráulica": "#3498db",  # Azul agua
-                        "Biomasa": "#27ae60"      # Verde oscuro
+                    grupos_tec = {
+                        "Eólica": [c for c in columnas_crudas if "wind" in c.lower()],
+                        "Hidráulica": [c for c in columnas_crudas if "hydro" in c.lower() or "water" in c.lower()],
+                        "Carbón": [c for c in columnas_crudas if "coal" in c.lower() or "lignite" in c.lower() or "brown coal" in c.lower() or "hard coal" in c.lower()],
+                        "Solar": [c for c in columnas_crudas if "solar" in c.lower()],
+                        "Gas natural": [c for c in columnas_crudas if "gas" in c.lower()],
+                        "Nuclear": [c for c in columnas_crudas if "nuclear" in c.lower()],
+                        "Biomasa": [c for c in columnas_crudas if "biomass" in c.lower()],
+                        "Petróleo": [c for c in columnas_crudas if "oil" in c.lower()]
                     }
 
-                    fig_entsoe = px.bar(
-                        df_melt_entsoe,
-                        x="Fecha",
-                        y="Generacion_MW",
-                        color="Tecnología",
-                        barmode="stack",
-                        category_orders={"Tecnología": columnas_tecnologias}, # Fuerza el orden de apilado exacto
-                        color_discrete_map=mapa_colores                      # Aplica los colores estándar
-                    )
+                    # Sumamos, evitamos negativos (bombeo) y convertimos de MW a GW dividiendo entre 1000
+                    for nombre_es, cols in grupos_tec.items():
+                        if cols:
+                            df_procesado[nombre_es] = (df_entsoe_filtrado[cols].sum(axis=1).clip(lower=0)) / 1000.0
 
-                    fig_entsoe.update_layout(
-                        plot_bgcolor="#f4f4f4", paper_bgcolor="#f4f4f4", font_color="#222",
-                        height=500, margin=dict(l=20, r=20, t=30, b=20),
-                        xaxis=dict(title="Fecha", tickangle=-45),
-                        yaxis=dict(title="Generación (MW)"),
-                        legend=dict(title="Tecnología / Fuente")
-                    )
+                    columnas_tecnologias = [k for k in grupos_tec.keys() if k in df_procesado.columns]
 
-                    st.plotly_chart(fig_entsoe, use_container_width=True)
-                    
+                    df_entsoe_filtrado = df_procesado[
+                        (df_procesado["Año"].isin(años_sel)) & 
+                        (df_procesado["Mes"].isin(meses_sel))
+                    ].copy()
+
+                    if not df_entsoe_filtrado.empty:
+                        total_generacion_gw = df_entsoe_filtrado[columnas_tecnologias].sum().sum()
+                        total_generacion_tw = total_generacion_gw / 1000.0  # Conversión a TW
+                        
+                        # --- Cálculos de Sostenibilidad y CO2 (en base a GW) ---
+                        factores_co2 = {
+                            "Carbón": 900, "Gas natural": 490, "Petróleo": 650
+                        }
+                        clean_keywords = ["Eólica", "Hidráulica", "Solar", "Biomasa", "Nuclear"]
+                        
+                        energias_limpias = []
+                        energias_sucias = []
+                        emisiones_totales_toneladas = 0
+                        
+                        totales_por_tecnologia = df_entsoe_filtrado[columnas_tecnologias].sum()
+                        
+                        for tec, val in totales_por_tecnologia.items():
+                            factor = factores_co2.get(tec, 0)
+                            # val (GW) * 24 horas = GWh. Como 1 g/kWh equivale a 1 t/GWh, val * 24 * factor da toneladas exactas.
+                            emisiones_totales_toneladas += val * 24 * factor
+                            
+                            if tec in clean_keywords:
+                                energias_limpias.append(val)
+                            else:
+                                energias_sucias.append(val)
+
+                        total_limpia = sum(energias_limpias)
+                        total_sucia = sum(energias_sucias)
+                        pct_limpia = (total_limpia / total_generacion_gw * 100) if total_generacion_gw > 0 else 0
+
+                        energia_total_gwh = total_generacion_gw * 24
+                        intensidad_carbono = (emisiones_totales_toneladas / energia_total_gwh) if energia_total_gwh > 0 else 0
+
+                        # --- RENDERIZAR KPIS (EN GW) ---
+                        st.markdown("### 📊 KPIs Avanzados de Mercado y Sostenibilidad")
+                        col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+                        
+                        with col_k1:
+                              st.metric("📊 Volumen Red", f"{total_generacion_tw:,.3f} TW")
+                        with col_k2:
+                            st.metric("🌱 Energía Limpia", f"{pct_limpia:.1f}%")
+                        with col_k3:
+                            st.metric("☁️ Emisiones Totales", f"{emisiones_totales_toneladas:,.0f} t")
+                        with col_k4:
+                            st.metric("🏭 Intensidad CO₂", f"{intensidad_carbono:.1f} g/kWh")
+
+                        st.markdown("---")
+
+                        # --- GRÁFICOS DE DONA Y DESGLOSE (EN GW) ---
+                        col_g1, col_g2 = st.columns(2)
+                        
+                        with col_g1:
+                            st.markdown("##### 🟢 Mix: Limpia vs Fósil")
+                            df_mix_pie = pd.DataFrame({
+                                "Tipo": ["Limpia / Baja en Carbono", "Fósil / Convencional"],
+                                "Generacion": [total_limpia, total_sucia]
+                            })
+                            fig_pie = px.pie(
+                                df_mix_pie, names="Tipo", values="Generacion", hole=0.4,
+                                color_discrete_sequence=["#2ecc71", "#e74c3c"]
+                            )
+                            fig_pie.update_traces(hovertemplate="<b>%{label}</b><br>Generación: %{value:,.1f} GW (%{percent})<extra></extra>")
+                            fig_pie.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=10))
+                            st.plotly_chart(fig_pie, use_container_width=True)
+
+                        with col_g2:
+                            st.markdown("##### ☀️ Desglose de Tecnologías Limpias")
+                            df_tec_clean = pd.DataFrame({
+                                "Tecnología": [t for t in clean_keywords if t in totales_por_tecnologia and totales_por_tecnologia[t] > 0],
+                                "Generacion": [totales_por_tecnologia[t] for t in clean_keywords if t in totales_por_tecnologia and totales_por_tecnologia[t] > 0]
+                            })
+                            if not df_tec_clean.empty:
+                                fig_clean = px.bar(
+                                    df_tec_clean, x="Tecnología", y="Generacion",
+                                    color="Tecnología", color_discrete_sequence=px.colors.qualitative.Pastel
+                                )
+                                fig_clean.update_traces(hovertemplate="<b>%{x}</b><br>Generación: %{y:,.1f} GW<extra></extra>")
+                                fig_clean.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+                                st.plotly_chart(fig_clean, use_container_width=True)
+                            else:
+                                st.info("No hay datos de tecnologías limpias para el filtro actual.")
+
+                        st.markdown("---")
+
+                        # --- GRÁFICO DE BARRAS APILADAS PRINCIPAL (EN GW) ---
+                        st.markdown("##### 📈 Evolución Diaria del Mix de Generación Real (GW)")
+
+                        orden_tecnologias_deseado = [
+                            "Nuclear", "Petróleo", "Carbón", "Gas natural", 
+                            "Eólica", "Solar", "Hidráulica", "Biomasa"
+                        ]
+                        
+                        columnas_tecnologias = [t for t in orden_tecnologias_deseado if t in df_entsoe_filtrado.columns]
+
+                        df_melt_entsoe = df_entsoe_filtrado.melt(
+                            id_vars=["Fecha"],
+                            value_vars=columnas_tecnologias,
+                            var_name="Tecnología",
+                            value_name="Generacion_GW"
+                        ).fillna(0)
+
+                        mapa_colores = {
+                            "Nuclear": "#9b59b6",     # Morado
+                            "Petróleo": "#c76606",    # Marrón/Gris neutro
+                            "Carbón": "#34495e",      # Gris oscuro / Antracita
+                            "Gas natural": "#95a5a6", # Gris claro
+                            "Eólica": "#1abc9c",      # Turquesa / Verde eólico
+                            "Solar": "#f1c40f",       # Amarillo
+                            "Hidráulica": "#3498db",  # Azul agua
+                            "Biomasa": "#27ae60"      # Verde oscuro
+                        }
+
+                        fig_entsoe = px.bar(
+                            df_melt_entsoe,
+                            x="Fecha",
+                            y="Generacion_GW",
+                            color="Tecnología",
+                            barmode="stack",
+                            category_orders={"Tecnología": columnas_tecnologias},
+                            color_discrete_map=mapa_colores
+                        )
+
+                        fig_entsoe.update_traces(
+                            hovertemplate="<b>%{fullData.name}</b><br>" +
+                                          "Fecha: %{x}<br>" +
+                                          "Generación: %{y:,.1f} GW<extra></extra>"
+                        )
+
+                        fig_entsoe.update_layout(
+                            plot_bgcolor="#f4f4f4", paper_bgcolor="#f4f4f4", font_color="#222",
+                            height=500, margin=dict(l=20, r=20, t=30, b=20),
+                            xaxis=dict(title="Fecha", tickangle=-45),
+                            yaxis=dict(title="Generación (GW)"),
+                            legend=dict(title="Tecnología / Fuente")
+                        )
+
+                        st.plotly_chart(fig_entsoe, use_container_width=True)
+                        
+                    else:
+                        st.warning("No hay registros para la combinación seleccionada.")
                 else:
-                    st.warning("No hay registros para la combinación seleccionada.")
+                    st.warning("No hay datos disponibles para las fechas seleccionadas.")
             else:
                 st.warning("No se pudieron obtener datos de la API.")
 
