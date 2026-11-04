@@ -3,6 +3,5 @@ pandas
 openpyxl
 plotly
 requests
-entsoe-py
 
 

@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from entsoe import EntsoePandasClient
 
 st.set_page_config(
     page_title="Paneles Solares",
@@ -204,7 +203,7 @@ def pills_selector(label, items, default_selected=None, key_prefix="pills"):
         return [int(x) for x in st.session_state[state_key]]
     except:
         return st.session_state[state_key]   
-
+            
 # ---------------------------------------------------------
 # BARRA LATERAL (ST.SIDEBAR): FILTROS CON SCROLL VERTICAL
 # ---------------------------------------------------------
@@ -313,7 +312,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "📅 Evolución Anual",
     "🌈 Paneles y Clima",
     "🌍 Impacto",
-    "⚡ Electricity Maps",
+    "⚡ Origen Energía",
     "📄 Tabla de Datos",
     "ℹ️ Info",
     "📖 Manual de Usuario"
@@ -2036,111 +2035,241 @@ with tab5:
     st.markdown("---")
 
 # =========================================================
-# 6) ⚡ ORIGEN DE LA ENERGÍA EN LA RED (ENTSO-E Transparency Platform)
+# 6) ⚡ ORIGEN DE LA ENERGÍA EN LA RED (Energy-Charts API)
 # =========================================================
 with tab6:
-    st.subheader("⚡ Origen de la Energía de Red (ENTSO-E Transparency Platform)")
+    st.subheader("⚡ Origen de la Energía de Red y Sostenibilidad (Energy-Charts)")
 
     st.markdown(
-        f"*Desglose oficial europeo del mix de generación eléctrica para el período seleccionado en la zona de estudio.*"
+        "*Desglose oficial europeo del mix de generación eléctrica, análisis de emisiones de CO₂ y ratio de energía limpia (Fuente: Fraunhofer ISE).*"
     )
 
-    # 1. Intentar obtener el token de st.secrets de forma segura
-    entsoe_api_key_input = None
-    try:
-        if "entsoe" in st.secrets and "api_key" in st.secrets["entsoe"]:
-            entsoe_api_key_input = st.secrets["entsoe"]["api_key"]
-    except Exception:
-        pass
-
-    # 2. Si no hay secreto configurado, mostrar el expander con el input manual como respaldo
-    if not entsoe_api_key_input:
-        with st.expander("🔑 Configuración de API Key de ENTSO-E (No detectada en secrets)"):
-            entsoe_api_key_input = st.text_input(
-                "Introduce tu API Token de ENTSO-E:",
-                type="password",
-                key="entsoe_token_input"
-            )
-            st.caption("Solicita tu token gratuito enviando un correo a transparency@entsoe.eu (Asunto: *Restful API access*).")
-    else:
-        st.success("🔒 API Key de ENTSO-E cargada de forma segura desde los secretos del sistema.")
-
-    # Selector de zona de red ENTSO-E (Por defecto Alemania-Luxemburgo 'DE_LU' acorde a Ingolstadt)
+    # Diccionario exclusivo con los 5 países requeridos
+    paises_map = {
+        "Germany": "de",
+        "Spain": "es",
+        "France": "fr",
+        "Austria": "at",
+        "Italy": "it"
+    }
+    
     zona_red = st.selectbox(
-        "Selecciona la zona de mercado / país de red:",
-        options=["DE_LU", "FR", "ES", "IT-North", "AT", "NL", "PL", "BE"],
+        "Selecciona el País:",
+        options=list(paises_map.keys()),
         index=0,
-        key="selector_zona_entsoe"
+        key="selector_zona_energy_charts"
     )
+    codigo_pais = paises_map[zona_red]
 
-    if años_sel and meses_sel and entsoe_api_key_input:
+    if años_sel and meses_sel:
         try:
-            from entsoe import EntsoePandasClient
-            import pandas as pd
+            import plotly.express as px
+            import plotly.graph_objects as go
 
-            client = EntsoePandasClient(api_key=entsoe_api_key_input)
-
-            # Rango de fechas basado en tus filtros de la app
             min_a = min(años_sel)
             max_a = max(años_sel)
-            start_dt = pd.Timestamp(f"{min_a}-01-01", tz="Europe/Brussels")
-            end_dt = pd.Timestamp(f"{max_a}-12-31", tz="Europe/Brussels")
 
-            @st.cache_data(ttl=3600)
-            def cargar_datos_entsoe(api_key, zona, start, end):
-                cli = EntsoePandasClient(api_key=api_key)
-                df_gen = cli.query_generation(zona, start=start, end=end)
-                return df_gen
+            start_date = f"{min_a}-01-01"
+            end_date = f"{max_a}-12-31"
 
-            with st.spinner("Descargando datos oficiales de ENTSO-E..."):
-                df_entsoe = cargar_datos_entsoe(entsoe_api_key_input, zona_red, start_dt, end_dt)
-
-            if not df_entsoe.empty:
-                df_entsoe = df_entsoe.reset_index()
-                time_col = df_entsoe.columns[0]
-                df_entsoe = df_entsoe.rename(columns={time_col: "datetime"})
+            @st.cache_data(ttl=86400, show_spinner=False)
+            def cargar_energy_charts(country, start, end):
+                url = f"https://api.energy-charts.info/public_power?country={country}&start={start}&end={end}"
+                response = requests.get(url, timeout=10)
                 
-                df_entsoe["Año"] = df_entsoe["datetime"].dt.year
-                df_entsoe["Mes_Num"] = df_entsoe["datetime"].dt.month
-                df_entsoe["Mes"] = df_entsoe["Mes_Num"].map(lambda m: orden_meses[m-1] if 1 <= m <= 12 else "")
-                df_entsoe["Fecha_Str"] = df_entsoe["datetime"].dt.strftime("%Y.%m.%d")
+                if response.status_code != 200:
+                    return None
+                    
+                data = response.json()
+                tiempos = [pd.to_datetime(ts, unit='s', utc=True) for ts in data.get("unix_seconds", [])]
+                
+                dic_to_df = {"tiempo_utc": tiempos}
+                
+                for prod in data.get("production_types", []):
+                    nombre_tec = prod.get("name", "Desconocido")
+                    valores = prod.get("data", [])
+                    if len(valores) == len(tiempos):
+                        dic_to_df[nombre_tec] = valores
+                        
+                df = pd.DataFrame(dic_to_df)
+                return df
 
+            with st.spinner(f"Consultando datos para {zona_red}..."):
+                df_entsoe = cargar_energy_charts(codigo_pais, start_date, end_date)
+
+            if df_entsoe is not None and not df_entsoe.empty:
+                df_entsoe.set_index("tiempo_utc", inplace=True)
+                
+                # Pasamos a diario
+                df_entsoe = df_entsoe.resample('D').mean().reset_index()
+
+                df_entsoe["Año"] = df_entsoe["tiempo_utc"].dt.year
+                df_entsoe["Mes_Num"] = df_entsoe["tiempo_utc"].dt.month
+                df_entsoe["Mes"] = df_entsoe["Mes_Num"].map(lambda m: orden_meses[m-1] if 1 <= m <= 12 else "")
+                df_entsoe["Fecha_Str"] = df_entsoe["tiempo_utc"].dt.strftime("%Y.%m.%d")
+
+                # Filtramos según los selectores de la app
                 df_entsoe_filtrado = df_entsoe[
                     (df_entsoe["Año"].isin(años_sel)) & 
                     (df_entsoe["Mes"].isin(meses_sel))
                 ].copy()
 
                 if not df_entsoe_filtrado.empty:
-                    columnas_tecnologias = [c for c in df_entsoe_filtrado.columns if c not in ["datetime", "Año", "Mes_Num", "Mes", "Fecha_Str"]]
+                    columnas_crudas = [
+                    c for c in df_entsoe_filtrado.columns 
+                    if c not in ["tiempo_utc", "Año", "Mes_Num", "Mes", "Fecha_Str"] 
+                    and pd.api.types.is_numeric_dtype(df_entsoe_filtrado[c])
+                    and "load" not in c.lower()  # <-- Filtramos 'load' aquí
+                ]
 
+                # --- AGRUPACIÓN Y TRADUCCIÓN AL ESPAÑOL ---
+                df_procesado = df_entsoe_filtrado[["tiempo_utc", "Año", "Mes_Num", "Mes"]].copy()
+                df_procesado["Fecha"] = df_entsoe_filtrado["tiempo_utc"].dt.strftime("%Y.%m.%d") # Renombramos a Fecha
+
+                # Agrupamos tecnologías por categorías lógicas en español
+                grupos_tec = {
+                    "Eólica": [c for c in columnas_crudas if "wind" in c.lower()],
+                    "Hidráulica": [c for c in columnas_crudas if "hydro" in c.lower() or "water" in c.lower()],
+                    "Carbón": [c for c in columnas_crudas if "coal" in c.lower() or "lignite" in c.lower() or "brown coal" in c.lower() or "hard coal" in c.lower()],
+                    "Solar": [c for c in columnas_crudas if "solar" in c.lower()],
+                    "Gas natural": [c for c in columnas_crudas if "gas" in c.lower()],
+                    "Nuclear": [c for c in columnas_crudas if "nuclear" in c.lower()],
+                    "Biomasa": [c for c in columnas_crudas if "biomass" in c.lower()],
+                    "Petróleo": [c for c in columnas_crudas if "oil" in c.lower()]
+                }
+
+                # Sumamos las columnas que pertenecen a cada grupo y evitamos negativos (bombeo)
+                for nombre_es, cols in grupos_tec.items():
+                    if cols:
+                        df_procesado[nombre_es] = df_entsoe_filtrado[cols].sum(axis=1).clip(lower=0)
+
+                # Columnas de tecnologías ya traducidas y agrupadas presentes en el DF
+                columnas_tecnologias = [k for k in grupos_tec.keys() if k in df_procesado.columns]
+
+                # Filtramos nuevamente con las fechas seleccionadas
+                df_entsoe_filtrado = df_procesado[
+                    (df_procesado["Año"].isin(años_sel)) & 
+                    (df_procesado["Mes"].isin(meses_sel))
+                ].copy()
+
+                if not df_entsoe_filtrado.empty:
                     total_generacion_mw = df_entsoe_filtrado[columnas_tecnologias].sum().sum()
                     
-                    st.success(f"¡Datos de ENTSO-E cargados con éxito para la zona **{zona_red}**!")
+                    # --- Cálculos de Sostenibilidad y CO2 ---
+                    factores_co2 = {
+                        "Carbón": 900, "Gas natural": 490, "Petróleo": 650
+                    }
+                    clean_keywords = ["Eólica", "Hidráulica", "Solar", "Biomasa", "Nuclear"]
                     
-                    col_e1, col_e2 = st.columns(2)
-                    with col_e1:
-                        st.metric("📊 Volumen Total Registrado en Red", f"{total_generacion_mw:,.0f} MW")
-                    with col_e2:
-                        st.metric("⚡ Tecnologías Analizadas", f"{len(columnas_tecnologias)} fuentes de red")
+                    energias_limpias = []
+                    energias_sucias = []
+                    emisiones_totales_toneladas = 0
+                    
+                    totales_por_tecnologia = df_entsoe_filtrado[columnas_tecnologias].sum()
+                    
+                    for tec, val in totales_por_tecnologia.items():
+                        factor = factores_co2.get(tec, 0)
+                        emisiones_totales_toneladas += (val * 24 * factor) / 1_000_000
+                        
+                        if tec in clean_keywords:
+                            energias_limpias.append(val)
+                        else:
+                            energias_sucias.append(val)
+
+                    total_limpia = sum(energias_limpias)
+                    total_sucia = sum(energias_sucias)
+                    pct_limpia = (total_limpia / total_generacion_mw * 100) if total_generacion_mw > 0 else 0
+
+                    energia_total_gwh = total_generacion_mw * 24 / 1000
+                    intensidad_carbono = (emisiones_totales_toneladas * 1_000_000 / (energia_total_gwh * 1_000_000)) if energia_total_gwh > 0 else 0
+
+                    # --- RENDERIZAR KPIS ---
+                    st.markdown("### 📊 KPIs Avanzados de Mercado y Sostenibilidad")
+                    col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+                    
+                    with col_k1:
+                        st.metric("📊 Volumen Red", f"{total_generacion_mw:,.0f} MW")
+                    with col_k2:
+                        st.metric("🌱 Energía Limpia", f"{pct_limpia:.1f}%")
+                    with col_k3:
+                        st.metric("☁️ Emisiones Totales", f"{emisiones_totales_toneladas:,.0f} t")
+                    with col_k4:
+                        st.metric("🏭 Intensidad CO₂", f"{intensidad_carbono:.1f} g/kWh")
 
                     st.markdown("---")
 
-                    st.markdown("##### 📊 Evolución del Mix de Generación Real (MW)")
+                    # --- GRÁFICOS DE DONA Y DESGLOSE ---
+                    col_g1, col_g2 = st.columns(2)
+                    
+                    with col_g1:
+                        st.markdown("##### 🟢 Mix: Limpia vs Fósil / No Limpia")
+                        df_mix_pie = pd.DataFrame({
+                            "Tipo": ["Limpia / Baja en Carbono", "Fósil / Convencional"],
+                            "Generacion": [total_limpia, total_sucia]
+                        })
+                        fig_pie = px.pie(
+                            df_mix_pie, names="Tipo", values="Generacion", hole=0.4,
+                            color_discrete_sequence=["#2ecc71", "#e74c3c"]
+                        )
+                        fig_pie.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=10))
+                        st.plotly_chart(fig_pie, use_container_width=True)
+
+                    with col_g2:
+                        st.markdown("##### ☀️ Desglose de Tecnologías Limpias")
+                        df_tec_clean = pd.DataFrame({
+                            "Tecnología": [t for t in clean_keywords if t in totales_por_tecnologia and totales_por_tecnologia[t] > 0],
+                            "Generacion": [totales_por_tecnologia[t] for t in clean_keywords if t in totales_por_tecnologia and totales_por_tecnologia[t] > 0]
+                        })
+                        if not df_tec_clean.empty:
+                            fig_clean = px.bar(
+                                df_tec_clean, x="Tecnología", y="Generacion",
+                                color="Tecnología", color_discrete_sequence=px.colors.qualitative.Pastel
+                            )
+                            fig_clean.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+                            st.plotly_chart(fig_clean, use_container_width=True)
+                        else:
+                            st.info("No hay datos de tecnologías limpias para el filtro actual.")
+
+                    st.markdown("---")
+
+                    # --- GRÁFICO DE BARRAS APILADAS PRINCIPAL (Con "Fecha" en el hover) ---
+                    st.markdown("##### 📈 Evolución Diaria del Mix de Generación Real (MW)")
+
+                    orden_tecnologias_deseado = [
+                        "Nuclear", "Petróleo", "Carbón", "Gas natural", 
+                        "Eólica", "Solar", "Hidráulica", "Biomasa"
+                    ]
+                    
+                    # Filtramos el orden para incluir solo las tecnologías que realmente existan en los datos
+                    columnas_tecnologias = [t for t in orden_tecnologias_deseado if t in df_entsoe_filtrado.columns]
 
                     df_melt_entsoe = df_entsoe_filtrado.melt(
-                        id_vars=["Fecha_Str"],
+                        id_vars=["Fecha"],
                         value_vars=columnas_tecnologias,
                         var_name="Tecnología",
                         value_name="Generacion_MW"
                     ).fillna(0)
 
+                    # Mapeo de colores estándar de la industria energética
+                    mapa_colores = {
+                        "Nuclear": "#9b59b6",     # Morado
+                        "Petróleo": "#7f8c8d",    # Marrón/Gris neutro
+                        "Carbón": "#34495e",      # Gris oscuro / Antracita
+                        "Gas natural": "#95a5a6", # Gris claro
+                        "Eólica": "#1abc9c",      # Turquesa / Verde eólico
+                        "Solar": "#f1c40f",       # Amarillo
+                        "Hidráulica": "#3498db",  # Azul agua
+                        "Biomasa": "#27ae60"      # Verde oscuro
+                    }
+
                     fig_entsoe = px.bar(
                         df_melt_entsoe,
-                        x="Fecha_Str",
+                        x="Fecha",
                         y="Generacion_MW",
                         color="Tecnología",
                         barmode="stack",
-                        color_discrete_sequence=px.colors.qualitative.Set2
+                        category_orders={"Tecnología": columnas_tecnologias}, # Fuerza el orden de apilado exacto
+                        color_discrete_map=mapa_colores                      # Aplica los colores estándar
                     )
 
                     fig_entsoe.update_layout(
@@ -2152,16 +2281,16 @@ with tab6:
                     )
 
                     st.plotly_chart(fig_entsoe, use_container_width=True)
+                    
                 else:
-                    st.warning("No se encontraron registros en ENTSO-E para la combinación exacta de años y meses seleccionados.")
+                    st.warning("No hay registros para la combinación seleccionada.")
             else:
-                st.warning("La respuesta de la API de ENTSO-E devolvió un conjunto de datos vacío.")
+                st.warning("No se pudieron obtener datos de la API.")
 
         except Exception as e:
-            st.error(f"Error al procesar la consulta con ENTSO-E: {e}")
+            st.error(f"Error al procesar los datos: {e}")
     else:
-        st.info("💡 Por favor, configura tu **API Token de ENTSO-E** en los secretos de Streamlit o introdúcelo arriba para habilitar la descarga.")
-
+        st.info("💡 Selecciona al menos un año y un mes para ver los datos.")
         
 # =========================================================
 # 7) 📄 TABLA DE DATOS
@@ -2433,13 +2562,20 @@ with tab9:
     with tab_m6:
         st.markdown("#### ⚡ Tab 6 – Origen de la Energía")
         st.markdown("""
-        * **Propósito:** Analizar la procedencia y mezcla de generación de la red eléctrica pública (Solar, Eólica, Gas, Carbón, Nuclear, Hidroeléctrica, etc.) en el país o zona de mercado seleccionada.
+        * **Propósito:** Analizar la procedencia, mezcla de generación eléctrica pública y sostenibilidad ambiental (emisiones e intensidad de carbono) en el país seleccionado.
         * **Características y Funcionamiento:**
-          * **Integración Oficial Europea:** Conexión con *ENTSO-E Transparency Platform* mediante la librería cliente de Python (`python-entsoe`).
-          * **Gestión de Claves de API:** Casilla expandible para ingresar tu **API Security Token** personal (100% gratuito solicitándolo en *transparency@entsoe.eu*).
-          * **Modo Demostración Integrado:** Si el usuario no dispone de un token activo o se deja en blanco, la pestaña activa automáticamente un modelo de simulación con la estructura real del mix energético alemán para asegurar la previsualización interactiva del dashboard sin bloqueos.
-          * **Selector de Zona de Mercado:** Menú desplegable para alternar dinámicamente entre países y regiones de la red europea (ej. `DE_LU` para Alemania-Luxemburgo, `FR` para Francia, `ES` para España, etc.).
-          * **Métricas y Gráficas de Red:** Tarjetas KPI con el volumen total registrado en MW y gráfico de barras apiladas diario con el desglose estacional por fuente de generación eléctrica.
+          * **Fuente de Datos Oficial (Energy-Charts / Fraunhofer ISE):** Conexión en tiempo real con la API pública de Fraunhofer ISE. **No requiere tokens, registros ni claves de API**, garantizando respuestas ultrarrápidas y estables.
+          * **Selector de Países:** Menú desplegable optimizado para los principales mercados europeos: **Germany, Spain, France, Austria e Italy**.
+          * **Procesamiento de Alta Eficiencia:** Agregación automática a resolución diaria mediante `.resample('D')`, filtrado de valores negativos (bombeo hidroeléctrico) y exclusión de la curva de demanda (*Load*) para mantener la pureza de los datos de generación.
+          * **KPIs Avanzados de Sostenibilidad:** 
+            * **Volumen Red (MW):** Potencia media diaria total registrada.
+            * **Energía Limpia (%):** Ratio porcentual de fuentes renovables y bajas en carbono.
+            * **Emisiones Totales (t):** Estimación de toneladas de CO₂ emitidas basadas en factores de emisión estándar por tecnología fósil.
+            * **Intensidad de Carbono (g CO₂/kWh):** Métrica relativa de limpieza de la red por unidad de energía consumida.
+          * **Visualización Gráfica Avanzada:**
+            * **Gráfico de Dona:** Distribución porcentual entre energía limpia y convencional.
+            * **Desglose de Renovables:** Gráfico secundario con el detalle de fuentes limpias.
+            * **Evolución Diaria Apilada:** Gráfico principal de barras apiladas ordenado de forma lógica (limpias abajo, fósiles arriba) con la paleta de colores estándar de la industria energética (amarillo para solar, gris para gas, gris oscuro para carbón) y tooltips optimizados con etiquetas de fecha limpias.
         """)
 
     with tab_m7:
