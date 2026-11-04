@@ -2253,7 +2253,7 @@ with tab6:
                     # Mapeo de colores estándar de la industria energética
                     mapa_colores = {
                         "Nuclear": "#9b59b6",     # Morado
-                        "Petróleo": "#7f8c8d",    # Marrón/Gris neutro
+                        "Petróleo": "#c76606",    # Marrón/Gris neutro
                         "Carbón": "#34495e",      # Gris oscuro / Antracita
                         "Gas natural": "#95a5a6", # Gris claro
                         "Eólica": "#1abc9c",      # Turquesa / Verde eólico
